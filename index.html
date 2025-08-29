@@ -7,62 +7,35 @@
   <style>
     html, body { margin:0; padding:0; height:100%; background:#ffd0ea; }
     #game { width:100vw; height:100vh; display:block; touch-action: manipulation; }
-
-    .btnbar {
-      position: fixed; top: 8px; right: 8px; z-index: 5; display:flex; gap:8px;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-    .btnbar button {
-      padding:8px 10px; border-radius:12px; border:none; background:#ffffffcc;
-      backdrop-filter: blur(6px); font-weight:700; cursor:pointer;
-    }
+    .btnbar { position: fixed; top: 8px; right: 8px; z-index: 5; display:flex; gap:8px;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .btnbar button { padding:8px 10px; border-radius:12px; border:none; background:#ffffffcc; backdrop-filter: blur(6px); font-weight:700; cursor:pointer; }
     .btnbar button:active { transform: translateY(1px); }
-    .badge {
-      position: fixed; left: 8px; top: 8px; z-index: 5;
-      background:#ffffffcc; padding:6px 10px; border-radius:12px; font: 14px/1.2 ui-sans-serif, system-ui;
-    }
-    .credits {
-      position: fixed; bottom: 8px; right: 8px; z-index: 5; font: 12px/1.2 ui-sans-serif, system-ui;
-      color:#000000aa; background:#ffffff88; padding:6px 8px; border-radius:8px;
-    }
+    .badge { position: fixed; left: 8px; top: 8px; z-index: 5; background:#ffffffcc; padding:6px 10px; border-radius:12px; font: 14px/1.2 ui-sans-serif, system-ui; }
+    .credits { position: fixed; bottom: 8px; right: 8px; z-index: 5; font: 12px/1.2 ui-sans-serif, system-ui;
+      color:#000000aa; background:#ffffff88; padding:6px 8px; border-radius:8px; }
 
-    .screen {
-      position: fixed; inset: 0; display: none; z-index: 999;
-      align-items: center; justify-content: center; flex-direction: column;
-    }
-    #startScreen {
-      display: flex;
-      background: #07A0FF; /* bright blue */
-      color: white; text-align: center;
-    }
-    #startTitle {
-      font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
-      font-size: clamp(40px, 10vw, 120px);
-      line-height: 1; color: #ff87c9;
-      margin: 0 12px 28px;
-      text-shadow:
-        0 0 8px rgba(255,255,255,0.9),
-        2px 2px 0 #ffffff, -2px -2px 0 #ffffff,
-        4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9);
-      letter-spacing: 2px;
-    }
-    .yellowBtn {
-      background: #ffd84d; color: #3a2a00; border: none; border-radius: 16px;
-      padding: 14px 22px; font-size: clamp(18px, 3.5vw, 22px); font-weight: 800;
-      cursor: pointer; margin: 8px; box-shadow: 0 6px 0 #c7a92f, 0 10px 18px rgba(0,0,0,0.15);
-    }
+    .screen { position: fixed; inset: 0; display: none; z-index: 999; align-items: center; justify-content: center; flex-direction: column; }
+    #startScreen { display: flex; background: #07A0FF; color: white; text-align: center; }
+    #startTitle { font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
+      font-size: clamp(40px, 10vw, 120px); line-height: 1; color: #ff87c9; margin: 0 12px 28px;
+      text-shadow: 0 0 8px rgba(255,255,255,0.9), 2px 2px 0 #ffffff, -2px -2px 0 #ffffff,
+                   4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9); letter-spacing: 2px; }
+    .yellowBtn { background: #ffd84d; color: #3a2a00; border: none; border-radius: 16px;
+      padding: 14px 22px; font-size: clamp(18px, 3.5vw, 22px); font-weight: 800; cursor: pointer; margin: 8px;
+      box-shadow: 0 6px 0 #c7a92f, 0 10px 18px rgba(0,0,0,0.15); }
     .yellowBtn:active { transform: translateY(2px); box-shadow: 0 4px 0 #c7a92f; }
-
     #overScreen { background: rgba(255, 208, 234, 0.96); color: #ff87c9; text-align: center; }
-    #overTitle {
-      font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
+    #overTitle { font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
       font-size: clamp(36px, 8vw, 96px); line-height: 1.1; color: #ff87c9; margin: 0 12px 18px;
-      text-shadow:
-        0 0 8px rgba(255,255,255,0.9),
-        2px 2px 0 #ffffff, -2px -2px 0 #ffffff,
-        4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9);
-    }
+      text-shadow: 0 0 8px rgba(255,255,255,0.9), 2px 2px 0 #ffffff, -2px -2px 0 #ffffff,
+                   4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9); }
     #tryBtn { margin-top: 10px; }
+
+    /* tiny inline error toast */
+    #err { position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+      background:#ffeff6; color:#a3003d; border:1px solid #ffa4c7; border-radius:12px;
+      padding:8px 12px; font: 14px/1.2 ui-sans-serif,system-ui; display:none; z-index: 1200; }
   </style>
 </head>
 <body>
@@ -73,6 +46,7 @@
       <button id="startKid" class="yellowBtn">Kid Mode</button>
       <button id="startStd" class="yellowBtn">Standard Mode</button>
     </div>
+    <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">If buttons don’t work, the engine didn’t load—refresh once.</p>
   </section>
 
   <!-- Game Over Screen -->
@@ -81,6 +55,7 @@
     <button id="tryBtn" class="yellowBtn">Tap to Restart</button>
   </section>
 
+  <div id="err"></div>
   <div class="badge">Sylveon Sky Run • Tap: Jump • Swipe: Left/Right</div>
   <div class="btnbar">
     <button id="btnKid">Kid Mode: OFF</button>
@@ -91,88 +66,170 @@
   <div id="game"></div>
   <div class="credits">Works offline after first load</div>
 
-  <script src="https://unpkg.com/kaboom@3000.1.15/dist/kaboom.js"></script>
+  <!-- Try loading Kaboom from unpkg; if it fails, auto-fallback to jsDelivr -->
   <script>
-  const THEME = {
-    heroName: "Sylveon",
-    collectNameSingular: "Munna",
-    collectNamePlural: "Munnas",
-    skyTop: [255, 208, 234],
-    skyBottom: [255, 238, 250],
-    cloudColor: [255,255,255],
-    hedgePink: [255, 169, 214],
-    heroFallback: [255, 182, 238],
-    munnaFallback: [255, 163, 213],
-  };
-  const SPEEDS = { normalStart: 280, kidStart: 230, minuteRamp: 60 };
+    (function loadKaboomWithFallback() {
+      function inject(src, onload){ var s=document.createElement('script'); s.src=src; s.onload=onload; s.onerror=function(){
+        if(src.includes('unpkg')){ inject('https://cdn.jsdelivr.net/npm/kaboom@3000.1.15/dist/kaboom.js', onload); }
+        else { document.getElementById('err').textContent='Could not load game engine. Check your connection or try again.'; document.getElementById('err').style.display='block'; }
+      }; document.head.appendChild(s); }
+      inject('https://unpkg.com/kaboom@3000.1.15/dist/kaboom.js', startGame);
+    })();
+  </script>
 
-  const k = kaboom({
-    background: THEME.skyBottom,
-    touchToMouse: true,
-    global: true,
-    width: Math.min(window.innerWidth, 1920),
-    height: Math.min(window.innerHeight, 1080),
-    canvas: document.getElementById("game"),
-    scale: 1,
-  });
+  <!-- The game boot function (runs only when Kaboom is loaded) -->
+  <script>
+    function startGame(){
+      const $ = (id)=>document.getElementById(id);
+      // Quick visual log to confirm clicks
+      $('startKid').addEventListener('click', ()=>console.log('Kid Mode clicked'));
+      $('startStd').addEventListener('click', ()=>console.log('Standard Mode clicked'));
 
-  let kidMode=false, worldSpeed=SPEEDS.normalStart, minuteTimer=0, shield=1, gameActive=false;
-  const rr=(a,b)=>rand(a,b);
+      const THEME = {
+        heroName: "Sylveon",
+        collectNameSingular: "Munna",
+        collectNamePlural: "Munnas",
+        skyTop: [255, 208, 234],
+        skyBottom: [255, 238, 250],
+        cloudColor: [255,255,255],
+        hedgePink: [255, 169, 214],
+        heroFallback: [255, 182, 238],
+        munnaFallback: [255, 163, 213],
+      };
+      const SPEEDS = { normalStart: 280, kidStart: 230, minuteRamp: 60 };
 
-  const startScreen=document.getElementById("startScreen");
-  const overScreen=document.getElementById("overScreen");
-  document.getElementById("startKid").onclick=()=>startMode(true);
-  document.getElementById("startStd").onclick=()=>startMode(false);
-  document.getElementById("tryBtn").onclick=()=>showStart();
-  function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-  function startMode(isKid){ kidMode=!!isKid; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart; restartGame(); startScreen.style.display="none"; gameActive=true; }
-  function showOver(){ gameActive=false; overScreen.style.display="flex"; }
+      const k = kaboom({
+        background: THEME.skyBottom,
+        touchToMouse: true,
+        global: true,
+        width: Math.min(window.innerWidth, 1920),
+        height: Math.min(window.innerHeight, 1080),
+        canvas: document.getElementById("game"),
+        scale: 1,
+      });
 
-  setGravity(2000);
-  const GROUND_Y=height()-80;
-  function drawCloudBlob(s=1){ drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor)); drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor)); drawCircle(vec2(28,-8),32*s,rgb(...THEME.cloudColor)); drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor)); }
-  function makeCloudGround(x){ return add([pos(x,GROUND_Y),{draw(){pushTransform();translate(this.pos);drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});for(let i=0;i<Math.ceil(width()/80);i++){pushTransform();translate(vec2(i*80+20,-6));drawCloudBlob(1);popTransform();}popTransform();}},area({shape:new Rect(vec2(0,0),width(),40)}),move(LEFT,worldSpeed),"ground"]); }
-  let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
-  loop(1,()=>{ if(gameActive) add([pos(width()+60,rr(20,height()*0.6)),{draw(){pushTransform();translate(this.pos);scaleTo(vec2(rr(0.7,1.8)));drawCloudBlob(1);popTransform();}},move(LEFT,rr(18,50)),"cloud"]); });
+      let kidMode=false, worldSpeed=SPEEDS.normalStart, minuteTimer=0, shield=1, gameActive=false;
+      const rr=(a,b)=>rand(a,b);
 
-  loadSprite("hero","assets/hero.png").catch(()=>{});
-  loadSprite("munna","assets/munna.png").catch(()=>{});
-  loadSprite("hedge","assets/hedge.png").catch(()=>{});
+      const startScreen=$('startScreen'), overScreen=$('overScreen');
+      $('startKid').onclick=()=>startMode(true);
+      $('startStd').onclick=()=>startMode(false);
+      $('tryBtn').onclick=()=>showStart();
+      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
+      function startMode(isKid){ kidMode=!!isKid; $('btnKid').textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart; restartGame(); startScreen.style.display="none"; gameActive=true; }
+      function showOver(){ gameActive=false; overScreen.style.display="flex"; }
 
-  const hero=add([pos(160,0),area(),body(),anchor("center"),"hero",{jumpForce:760,canDouble:false,vx:0,maxVX:360,invuln:0},sprite("hero",{width:60,height:48})]);
-  if(!assets.get("sprite","hero")){ hero.use(rect(54,34)); hero.use(color(...THEME.heroFallback)); }
-  hero.onGround(()=>hero.canDouble=true);
-  function doJump(){ if(!gameActive)return; if(hero.isGrounded()){hero.jump(hero.jumpForce);hero.canDouble=true;startMusic();} else if(hero.canDouble){hero.jump(hero.jumpForce*0.9);hero.canDouble=false;} }
-  onClick(()=>doJump());
+      setGravity(2000);
+      const GROUND_Y=height()-80;
+      function drawCloudBlob(s=1){
+        drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor));
+        drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor));
+        drawCircle(vec2(28,-8),32*s,rgb(...THEME.cloudColor));
+        drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor));
+      }
+      function makeCloudGround(x){
+        return add([ pos(x,GROUND_Y),
+          { draw(){ pushTransform(); translate(this.pos);
+            drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
+            for(let i=0;i<Math.ceil(width()/80);i++){ pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform(); }
+            popTransform(); } },
+          area({shape:new Rect(vec2(0,0),width(),40)}), move(LEFT,worldSpeed), "ground" ]);
+      }
+      let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
+      loop(1,()=>{ if(gameActive) add([ pos(width()+60,rr(20,height()*0.6)),
+        { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rr(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
+        move(LEFT,rr(18,50)), "cloud" ]); });
 
-  function spawnHedge(){const f=chance(0.45);const w=rr(36,64),h=rr(28,48);const y=f?rr(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);const o=add([pos(width()+rr(0,120),y),area(),move(LEFT,worldSpeed),"obstacle"]);if(assets.get("sprite","hedge"))o.use(sprite("hedge",{width:w,height:h}));else o.use(rect(w,h));}
-  function spawnMunna(){const y=rr(GROUND_Y-260,GROUND_Y-90);const r=rr(14,kidMode?22:18);const c=add([pos(width()+rr(0,60),y),area({shape:new Circle(vec2(0,0),r)}),move(LEFT,worldSpeed*1.05),"collectible"]);if(assets.get("sprite","munna"))c.use(sprite("munna",{width:r*2.4,height:r*2.2}));else c.use(circle(r));}
-  loop(1,()=>{if(gameActive){if(chance(kidMode?0.55:0.7))spawnHedge();if(chance(kidMode?0.75:0.6))spawnMunna();}});
+      loadSprite("hero","assets/hero.png").catch(()=>{});
+      loadSprite("munna","assets/munna.png").catch(()=>{});
+      loadSprite("hedge","assets/hedge.png").catch(()=>{});
 
-  let meters=0,saved=0;
-  const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]),savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-  function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
-  loop(1,()=>{ if(gameActive){meters+=worldSpeed/60;minuteTimer++;if(!kidMode&&minuteTimer%60===0)worldSpeed+=SPEEDS.minuteRamp;updateUI();}});
+      const hero=add([ pos(160,0), area(), body(), anchor("center"), "hero",
+        { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }, sprite("hero",{width:60,height:48}) ]);
+      if(!assets.get("sprite","hero")){ hero.use(rect(54,34)); hero.use(color(...THEME.heroFallback)); }
+      hero.onGround(()=>hero.canDouble=true);
+      function doJump(){ if(!gameActive)return; if(hero.isGrounded()){ hero.jump(hero.jumpForce); hero.canDouble=true; startMusic(); } else if(hero.canDouble){ hero.jump(hero.jumpForce*0.9); hero.canDouble=false; } }
+      onClick(()=>doJump());
+      onTouchStart(()=>{ /* kick iOS interaction */ });
 
-  onUpdate(()=>{[groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0)); if(hero.pos.y>height()+60)hitObstacle(); hero.pos.x=clamp(hero.pos.x+hero.vx*dt(),60,width()*0.75); hero.vx*=0.9;});
-  hero.onCollide("obstacle",()=>{if(gameActive)hitObstacle();});
-  hero.onCollide("collectible",c=>{if(gameActive){destroy(c);saved++;updateUI();startMusic();}});
+      function spawnHedge(){
+        const f=chance(0.45);
+        const w=rr(36,64), h=rr(28,48);
+        const y=f?rr(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
+        const o=add([ pos(width()+rr(0,120),y), area(), move(LEFT,worldSpeed), "obstacle" ]);
+        if(assets.get("sprite","hedge")) o.use(sprite("hedge",{width:w,height:h})); else o.use(rect(w,h));
+      }
+      function spawnMunna(){
+        const y=rr(GROUND_Y-260,GROUND_Y-90);
+        const r=rr(14,kidMode?22:18);
+        const c=add([ pos(width()+rr(0,60), y), area({shape:new Circle(vec2(0,0), r)}), move(LEFT,worldSpeed*1.05), "collectible" ]);
+        if(assets.get("sprite","munna")) c.use(sprite("munna",{width:r*2.4,height:r*2.2})); else c.use(circle(r));
+      }
+      loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
 
-  function hitObstacle(){ if(hero.invuln>0)return; if(shield>0){shield--;hero.invuln=1.5;updateUI();wait(1.5,()=>hero.invuln=0);} else gameOver(); }
-  function gameOver(){ gameActive=false; showOver(); }
-  function restartGame(){ destroyAll("obstacle");destroyAll("collectible");destroyAll("cloud"); meters=0;saved=0;minuteTimer=0; worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart; shield=1; hero.pos=vec2(160,0); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false; }
+      let meters=0,saved=0;
+      const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]), savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
+      function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
+      loop(1,()=>{ if(gameActive){ meters+=worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); } });
 
-  document.getElementById("btnKid").onclick=()=>{kidMode=!kidMode;document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;};
-  document.getElementById("btnPause").onclick=()=>{gameActive=!gameActive;};
-  document.getElementById("btnFS").onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();};
+      onUpdate(()=>{
+        [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
+        if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
+        if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
+        hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
+        hero.vx *= 0.9;
+        if(gameActive && hero.pos.y > height()+60) hitObstacle();
+      });
 
-  let audioCtx=null,masterGain=null,isMuted=false,musicStarted=false;
-  function startMusic(){ if(musicStarted)return; musicStarted=true; audioCtx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=audioCtx.createGain(); masterGain.gain.value=0.12; masterGain.connect(audioCtx.destination); playLoop(); }
-  function note(f,t,l){const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="sine";o.frequency.setValueAtTime(f,audioCtx.currentTime+t);g.gain.setValueAtTime(0,audioCtx.currentTime+t);g.gain.linearRampToValueAtTime(0.12,audioCtx.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+t+l);o.connect(g);g.connect(masterGain);o.start(audioCtx.currentTime+t);o.stop(audioCtx.currentTime+t+l+0.05);}
-  function playLoop(){const bpm=96,beat=60/bpm,base=261.63;for(let i=0;i<16;i++){const t=i*beat*0.5;const f=base*Math.pow(2,[0,3,5,7,10,12][i%6]/12);note(f,t,beat*0.45);}setTimeout(playLoop,beat*1000*8);}
-  document.getElementById("btnMute").onclick=()=>{isMuted=!isMuted;document.getElementById("btnMute").textContent=isMuted?"Unmute":"Mute";if(masterGain)masterGain.gain.value=isMuted?0:0.12;};
+      hero.onCollide("obstacle",()=>{ if(gameActive) hitObstacle(); });
+      hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); startMusic(); });
 
-  showStart();
+      function hitObstacle(){
+        if(hero.invuln>0) return;
+        if(shield>0){ shield--; hero.invuln=1.5; updateUI(); wait(1.5,()=>{ hero.invuln=0; }); }
+        else { gameOver(); }
+      }
+      function gameOver(){ gameActive=false; showOver(); }
+      function restartGame(){
+        destroyAll("obstacle"); destroyAll("collectible"); destroyAll("cloud");
+        meters=0; saved=0; minuteTimer=0;
+        worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
+        shield=1; hero.invuln=0;
+        hero.pos=vec2(160,0); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+      }
+
+      $('btnKid').onclick=()=>{ kidMode=!kidMode; $('btnKid').textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
+      $('btnPause').onclick=()=>{ gameActive=!gameActive; };
+      $('btnFS').onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+
+      let audioCtx=null, masterGain=null, isMuted=false, musicStarted=false;
+      function startMusic(){
+        if(musicStarted) return;
+        musicStarted = true;
+        audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.12;
+        masterGain.connect(audioCtx.destination);
+        playLoop();
+      }
+      function note(f,t,l){ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type="sine";
+        o.frequency.setValueAtTime(f,audioCtx.currentTime+t);
+        g.gain.setValueAtTime(0,audioCtx.currentTime+t);
+        g.gain.linearRampToValueAtTime(0.12,audioCtx.currentTime+t+0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+t+l);
+        o.connect(g); g.connect(masterGain); o.start(audioCtx.currentTime+t); o.stop(audioCtx.currentTime+t+l+0.05);
+      }
+      function playLoop(){
+        if(!audioCtx) return;
+        const bpm=96, beat=60/bpm, base=261.63;
+        for(let i=0;i<16;i++){ const t=i*beat*0.5; const f=base*Math.pow(2,[0,3,5,7,10,12][i%6]/12); note(f,t,beat*0.45); }
+        setTimeout(playLoop, beat*1000*8);
+      }
+      $('btnMute').onclick=()=>{ isMuted=!isMuted; $('btnMute').textContent = isMuted ? "Unmute" : "Mute"; if(masterGain) masterGain.gain.value = isMuted ? 0 : 0.12; };
+
+      // Show start
+      showStart();
+    }
   </script>
 </body>
 </html>
