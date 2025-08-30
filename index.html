@@ -62,7 +62,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.10</div>
+    <div id="versionTag">Version v1.0.11</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -98,7 +98,7 @@
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
     // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.10)...");
+    dbg("Booting Sylveons Quest (v1.0.11)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     // Button wiring BEFORE game init (so we can see clicks even if init fails)
@@ -161,18 +161,25 @@
         drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor));
       }
       function makeCloudGround(x){
-        return add([ pos(x,GROUND_Y),
-          { draw(){
+        return add([
+          pos(x,GROUND_Y),
+          // ---- the important fix: static body so the hero can land ----
+          body({ isStatic: true }),
+          area({ shape:new Rect(vec2(0,0), width(), 40) }),
+          move(LEFT,worldSpeed),
+          // visual
+          {
+            draw(){
               pushTransform(); translate(this.pos);
               drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
               for(let i=0;i<Math.ceil(width()/80);i++){
                 pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform();
               }
               popTransform();
-            } },
-          area({shape:new Rect(vec2(0,0),width(),40)}),
-          move(LEFT,worldSpeed),
-          "ground" ]);
+            }
+          },
+          "ground"
+        ]);
       }
       let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
       loop(1,()=>{ if(gameActive) add([ pos(width()+60,rand(20,height()*0.6)),
@@ -188,7 +195,6 @@
       // ===== HERO: create before any restart =====
       const hero=add([
         pos(160,0), area(), body(), anchor("center"), "hero",
-        // NOTE: renamed from jumpForce -> jumpPower to avoid duplicate property collisions
         { jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
       ]);
       hero.use(rect(54,34));
@@ -207,7 +213,13 @@
       let meters=0, saved=0;
       const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
       const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-      function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
+      // tiny HUD for testing
+      const hud=add([text("",{size:14}),pos(16,84),fixed(),color(20,20,20)]);
+      function updateUI(){
+        meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
+        savedLabel.text=`Munnas: ${saved}`;
+        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}`;
+      }
 
       // spawns (check flags at spawn time)
       function spawnHedge(){
@@ -232,11 +244,16 @@
 
       // update + failcheck
       onUpdate(()=>{
+        // scroll the two cloud grounds
         [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
         if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
         if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
+
+        // keep hero inside lanes
         hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
         hero.vx *= 0.9;
+
+        // fell off screen
         if(gameActive && hero.pos.y > height()+60) hitObstacle();
       });
 
@@ -271,7 +288,7 @@
       document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
       document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-      // begin AFTER everything is defined (with latch)
+      // begin AFTER everything is defined
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
       function showOver(){ gameActive=false; overScreen.style.display="flex"; }
       function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display="none"; gameActive=true; }
