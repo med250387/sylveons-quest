@@ -62,7 +62,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.7</div>
+    <div id="versionTag">Version v1.0.8</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -98,7 +98,7 @@
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
     // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.7)...");
+    dbg("Booting Sylveons Quest (v1.0.8)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     // Button wiring BEFORE game init (so we can see clicks even if init fails)
@@ -191,9 +191,9 @@
         { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
         move(LEFT,rand(18,50)), "cloud" ]); });
 
-      // assets: load & upgrade safely
+      // assets: load & upgrade safely (NO touching hero in .then)
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; if (hero.exists()) hero.use(sprite("hero",{width:60,height:48})); }).catch(()=>{});
+      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
       loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
       loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
 
@@ -202,9 +202,12 @@
         pos(160,0), area(), body(), anchor("center"), "hero",
         { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
       ]);
+      // placeholder visuals first
       hero.use(rect(54,34));
       hero.use(color(...THEME.heroFallback));
+      // upgrade to sprite if already loaded
       if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
+
       hero.onGround(()=>hero.canDouble=true);
 
       function doJump(){
@@ -214,7 +217,7 @@
       }
       onClick(()=>doJump());
 
-      // spawns
+      // spawns (check flags at spawn time)
       function spawnHedge(){
         const fly=chance(0.45);
         const w=rand(36,64), h=rand(28,48);
