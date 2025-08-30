@@ -62,7 +62,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.8</div>
+    <div id="versionTag">Version v1.0.9</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -94,11 +94,11 @@
     // ===== Debug helpers =====
     const $ = (id)=>document.getElementById(id);
     const dbgBox = $('debug');
-    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\\n"); console.log(msg); }
+    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
     // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.8)...");
+    dbg("Booting Sylveons Quest (v1.0.9)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     // Button wiring BEFORE game init (so we can see clicks even if init fails)
@@ -148,24 +148,11 @@
       let kidMode=!!startKid,worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
       let minuteTimer=0,shield=1,gameActive=false;
 
-      // ===== SCORE & LABELS (declare BEFORE begin/restart) =====
-      let meters=0, saved=0;
-      const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
-      const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-      function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
-
-      // screens
-      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-      function showOver(){ gameActive=false; overScreen.style.display="flex"; }
-      function begin(){ restartGame(); startScreen.style.display="none"; gameActive=true; }
-      document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
-      begin();
-
-      // physics
+      // physics first
       setGravity(2000);
       const GROUND_Y=height()-80;
 
-      // cloud drawing
+      // cloud drawing helpers
       function drawCloudBlob(s=1){
         drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor));
         drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor));
@@ -191,23 +178,20 @@
         { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
         move(LEFT,rand(18,50)), "cloud" ]); });
 
-      // assets: load & upgrade safely (NO touching hero in .then)
+      // ===== ASSETS: safe flags (no touching hero here) =====
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
       loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
       loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
       loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
 
-      // hero
+      // ===== HERO: create before any restart =====
       const hero=add([
         pos(160,0), area(), body(), anchor("center"), "hero",
         { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
       ]);
-      // placeholder visuals first
       hero.use(rect(54,34));
       hero.use(color(...THEME.heroFallback));
-      // upgrade to sprite if already loaded
       if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
-
       hero.onGround(()=>hero.canDouble=true);
 
       function doJump(){
@@ -216,6 +200,12 @@
         else if(hero.canDouble){ hero.jump(hero.jumpForce*0.9); hero.canDouble=false; }
       }
       onClick(()=>doJump());
+
+      // ===== SCORE & LABELS (now safe to use during restart) =====
+      let meters=0, saved=0;
+      const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
+      const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
+      function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
 
       // spawns (check flags at spawn time)
       function spawnHedge(){
@@ -262,7 +252,7 @@
       }
       function gameOver(){ gameActive=false; showOver(); }
 
-      // reset
+      // reset (safe: hero & labels already exist)
       function restartGame(){
         destroyAll("obstacle"); destroyAll("collectible"); destroyAll("cloud");
         meters=0; saved=0; minuteTimer=0;
@@ -276,6 +266,13 @@
       document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
       document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
       document.getElementById("btnFS").onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+
+      // ===== begin AFTER everything is defined =====
+      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
+      function showOver(){ gameActive=false; overScreen.style.display="flex"; }
+      function begin(){ restartGame(); startScreen.style.display="none"; gameActive=true; }
+      document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
+      begin();
 
       dbg("Game started ✔︎");
     }
