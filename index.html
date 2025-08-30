@@ -37,6 +37,17 @@
     /* Version tag on start screen */
     #versionTag { margin-top: 12px; font: 12px/1.2 ui-sans-serif, system-ui; color:#fff;
       background:#00000033; padding:6px 8px; border-radius:8px; }
+
+    /* Debug panel */
+    #debug {
+      position: fixed; top: 8px; left: 8px; z-index: 1200;
+      width: min(90vw, 520px); max-height: 48vh; overflow:auto;
+      background: #fff6fa; color:#6a0030; border:1px solid #ffa6c9; border-radius:10px;
+      padding:8px 10px; font: 12px/1.35 ui-sans-serif, system-ui; white-space: pre-wrap;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+      display: none;
+    }
+    #debug b { color:#a3003d; }
   </style>
 </head>
 <body>
@@ -50,7 +61,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.4</div>
+    <div id="versionTag">Version v1.0.5</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -58,6 +69,8 @@
     <h2 id="overTitle">Try again?</h2>
     <button id="tryBtn" class="yellowBtn">Tap to Restart</button>
   </section>
+
+  <div id="debug"></div>
 
   <div class="badge">Sylveon Sky Run • Tap: Jump • Swipe: Left/Right</div>
   <div class="btnbar">
@@ -72,171 +85,185 @@
   <!-- Local engine (no CDNs) -->
   <script src="assets/kaboom.js"></script>
 
-  <!-- Full Game -->
+  <!-- Full Game with diagnostics -->
   <script>
-    // --- constants ---
-    const THEME={heroName:"Sylveon",collectNameSingular:"Munna",collectNamePlural:"Munnas",
-      skyTop:[255,208,234],skyBottom:[255,238,250],cloudColor:[255,255,255],
-      hedgePink:[255,169,214],heroFallback:[255,182,238],munnaFallback:[255,163,213]};
-    const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
+    // ===== Debug helpers =====
+    const $ = (id)=>document.getElementById(id);
+    const dbgBox = $('debug');
+    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\\n"); console.log(msg); }
+    window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    // global kaboom
-    const k=kaboom({background:THEME.skyBottom,touchToMouse:true,global:true,
-      width:Math.min(window.innerWidth,1920),height:Math.min(window.innerHeight,1080),
-      canvas:document.getElementById("game"),scale:1});
+    // Startup logs
+    dbg("Booting Sylveons Quest (v1.0.5)...");
+    dbg("Checking engine: " + (typeof window.kaboom));
 
-    // buttons / screens (DOM)
-    const startScreen=document.getElementById("startScreen");
-    const overScreen=document.getElementById("overScreen");
-    document.getElementById("startKid").onclick=()=>startMode(true);
-    document.getElementById("startStd").onclick=()=>startMode(false);
-    document.getElementById("tryBtn").onclick=()=>showStart();
+    // Button wiring BEFORE game init (so we can see clicks even if init fails)
+    $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
+    $('startStd').addEventListener('click', ()=>{ dbg("UI: Standard Mode clicked"); safeStart(false); });
+    $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
 
-    // state
-    let kidMode=false,worldSpeed=SPEEDS.normalStart,minuteTimer=0,shield=1,gameActive=false;
+    function safeStart(startKid){
+      try {
+        if (typeof window.kaboom !== 'function') {
+          dbg("Engine missing. Check that assets/kaboom.js exists (case-sensitive) and is being served.");
+          dbg("Expected path: /assets/kaboom.js");
+          alert("Game engine not found. Please confirm assets/kaboom.js exists in your repo.");
+          return;
+        }
+        startGame(startKid);
+      } catch (err) {
+        dbg("startGame crashed: " + err.message);
+      }
+    }
 
-    function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-    function startMode(isKid){
-      kidMode=!!isKid;
+    // ===== Full Game =====
+    function startGame(startKid){
+      dbg("startGame() entered — kid=" + !!startKid);
+
+      const THEME={heroName:"Sylveon",collectNameSingular:"Munna",collectNamePlural:"Munnas",
+        skyTop:[255,208,234],skyBottom:[255,238,250],cloudColor:[255,255,255],
+        hedgePink:[255,169,214],heroFallback:[255,182,238],munnaFallback:[255,163,213]};
+      const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
+
+      // kaboom init
+      const k=kaboom({background:THEME.skyBottom,touchToMouse:true,global:true,
+        width:Math.min(window.innerWidth,1920),height:Math.min(window.innerHeight,1080),
+        canvas:document.getElementById("game"),scale:1});
+      dbg("Kaboom initialised ✔︎");
+
+      // DOM refs
+      const startScreen=$('startScreen');
+      const overScreen=$('overScreen');
+
+      // state
+      let kidMode=!!startKid,worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
+      let minuteTimer=0,shield=1,gameActive=false;
+
+      // screen flows
+      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
+      function showOver(){ gameActive=false; overScreen.style.display="flex"; }
+      function begin(){ restartGame(); startScreen.style.display="none"; gameActive=true; }
       document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
-      worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
-      restartGame();
-      startScreen.style.display="none";
-      gameActive=true;
-    }
-    function showOver(){ gameActive=false; overScreen.style.display="flex"; }
+      begin();
 
-    // physics
-    setGravity(2000);
-    const GROUND_Y=height()-80;
+      // physics
+      setGravity(2000);
+      const GROUND_Y=height()-80;
 
-    // backdrop: clouds + cloud ground
-    function drawCloudBlob(s=1){
-      drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor));
-      drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor));
-      drawCircle(vec2(28,-8),32*s,rgb(...THEME.cloudColor));
-      drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor));
-    }
-    function makeCloudGround(x){
-      return add([ pos(x,GROUND_Y),
-        { draw(){
-            pushTransform(); translate(this.pos);
-            drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
-            for(let i=0;i<Math.ceil(width()/80);i++){
-              pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform();
-            }
-            popTransform();
-          } },
-        area({shape:new Rect(vec2(0,0),width(),40)}),
-        move(LEFT,worldSpeed),
-        "ground" ]);
-    }
-    let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
-    loop(1,()=>{ if(gameActive) add([ pos(width()+60,rand(20,height()*0.6)),
-      { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
-      move(LEFT,rand(18,50)), "cloud" ]); });
-
-    // --- ASSETS: load & upgrade pattern (no crashing if missing) ---
-    // Start with placeholders; when a sprite finishes loading, swap it in.
-    let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-
-    loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; if (hero.exists()) hero.use(sprite("hero",{width:60,height:48})); }).catch(()=>{});
-    loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
-    loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
-
-    // hero (start as a safe shape, upgrade if sprite loads)
-    const hero=add([
-      pos(160,0), area(), body(), anchor("center"), "hero",
-      { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
-    ]);
-    // visual: placeholder first
-    hero.use(rect(54,34));
-    hero.use(color(...THEME.heroFallback));
-    // if sprite already ready (cache), attach now; otherwise the .then above will attach later
-    if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
-
-    hero.onGround(()=>hero.canDouble=true);
-    function doJump(){
-      if(!gameActive) return;
-      if(hero.isGrounded()){
-        hero.jump(hero.jumpForce); hero.canDouble=true;
-      } else if(hero.canDouble){
-        hero.jump(hero.jumpForce*0.9); hero.canDouble=false;
+      // cloud drawing
+      function drawCloudBlob(s=1){
+        drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor));
+        drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor));
+        drawCircle(vec2(28,-8),32*s,rgb(...THEME.cloudColor));
+        drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor));
       }
-    }
-    onClick(()=>doJump());
-
-    // spawns (use sprite if available, else fall back to shapes)
-    function spawnHedge(){
-      const fly=chance(0.45);
-      const w=rand(36,64), h=rand(28,48);
-      const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
-      const o=add([ pos(width()+rand(0,120),y), area(), move(LEFT,worldSpeed), "obstacle" ]);
-      if (hedgeSpriteReady) {
-        o.use(sprite("hedge",{width:w,height:h}));
-      } else {
-        o.use(rect(w,h)); o.use(color(...THEME.hedgePink));
+      function makeCloudGround(x){
+        return add([ pos(x,GROUND_Y),
+          { draw(){
+              pushTransform(); translate(this.pos);
+              drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
+              for(let i=0;i<Math.ceil(width()/80);i++){
+                pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform();
+              }
+              popTransform();
+            } },
+          area({shape:new Rect(vec2(0,0),width(),40)}),
+          move(LEFT,worldSpeed),
+          "ground" ]);
       }
-    }
-    function spawnMunna(){
-      const y=rand(GROUND_Y-260,GROUND_Y-90);
-      const r=rand(14,kidMode?22:18);
-      const c=add([ pos(width()+rand(0,60), y), area({shape:new Circle(vec2(0,0), r)}), move(LEFT,worldSpeed*1.05), "collectible" ]);
-      if (munnaSpriteReady) {
-        c.use(sprite("munna",{width:r*2.4,height:r*2.2}));
-      } else {
-        c.use(circle(r)); c.use(color(...THEME.munnaFallback));
+      let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
+      loop(1,()=>{ if(gameActive) add([ pos(width()+60,rand(20,height()*0.6)),
+        { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
+        move(LEFT,rand(18,50)), "cloud" ]); });
+
+      // assets: load & upgrade
+      let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
+      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; if (hero.exists()) hero.use(sprite("hero",{width:60,height:48})); }).catch(()=>{});
+      loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
+      loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
+
+      // hero
+      const hero=add([
+        pos(160,0), area(), body(), anchor("center"), "hero",
+        { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
+      ]);
+      hero.use(rect(54,34));
+      hero.use(color(...THEME.heroFallback));
+      if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
+      hero.onGround(()=>hero.canDouble=true);
+
+      function doJump(){
+        if(!gameActive) return;
+        if(hero.isGrounded()){ hero.jump(hero.jumpForce); hero.canDouble=true; }
+        else if(hero.canDouble){ hero.jump(hero.jumpForce*0.9); hero.canDouble=false; }
       }
+      onClick(()=>doJump());
+
+      // spawns
+      function spawnHedge(){
+        const fly=chance(0.45);
+        const w=rand(36,64), h=rand(28,48);
+        const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
+        const o=add([ pos(width()+rand(0,120),y), area(), move(LEFT,worldSpeed), "obstacle" ]);
+        if (hedgeSpriteReady) o.use(sprite("hedge",{width:w,height:h}));
+        else { o.use(rect(w,h)); o.use(color(...THEME.hedgePink)); }
+      }
+      function spawnMunna(){
+        const y=rand(GROUND_Y-260,GROUND_Y-90);
+        const r=rand(14,kidMode?22:18);
+        const c=add([ pos(width()+rand(0,60), y), area({shape:new Circle(vec2(0,0), r)}), move(LEFT,worldSpeed*1.05), "collectible" ]);
+        if (munnaSpriteReady) c.use(sprite("munna",{width:r*2.4,height:r*2.2}));
+        else { c.use(circle(r)); c.use(color(...THEME.munnaFallback)); }
+      }
+      loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
+
+      // score
+      let meters=0,saved=0;
+      const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
+      const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
+      function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
+      loop(1,()=>{ if(gameActive){ meters+=worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); } });
+
+      // update + failcheck
+      onUpdate(()=>{
+        [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
+        if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
+        if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
+        hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
+        hero.vx *= 0.9;
+        if(gameActive && hero.pos.y > height()+60) hitObstacle();
+      });
+
+      // collisions
+      hero.onCollide("obstacle",()=>{ if(gameActive) hitObstacle(); });
+      hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
+
+      // one free hit
+      function hitObstacle(){
+        if(hero.invuln>0) return;
+        if(shield>0){
+          shield--; hero.invuln=1.5; updateUI();
+          wait(1.5,()=>{ hero.invuln=0; });
+        } else { gameOver(); }
+      }
+      function gameOver(){ gameActive=false; showOver(); }
+
+      // reset
+      function restartGame(){
+        destroyAll("obstacle"); destroyAll("collectible"); destroyAll("cloud");
+        meters=0; saved=0; minuteTimer=0;
+        worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
+        shield=1; hero.invuln=0;
+        hero.pos=vec2(160,0); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+      }
+
+      // top-right controls
+      document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
+      document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
+      document.getElementById("btnFS").onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+
+      dbg("Game started ✔︎");
     }
-    loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
-
-    // score
-    let meters=0,saved=0;
-    const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
-    const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-    function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; }
-    loop(1,()=>{ if(gameActive){ meters+=worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); } });
-
-    // movement + failcheck
-    onUpdate(()=>{
-      [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
-      if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
-      if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
-      hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
-      hero.vx *= 0.9;
-      if(gameActive && hero.pos.y > height()+60) hitObstacle();
-    });
-
-    // collisions
-    hero.onCollide("obstacle",()=>{ if(gameActive) hitObstacle(); });
-    hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
-
-    // one free hit
-    function hitObstacle(){
-      if(hero.invuln>0) return;
-      if(shield>0){
-        shield--; hero.invuln=1.5; updateUI();
-        wait(1.5,()=>{ hero.invuln=0; });
-      } else { gameOver(); }
-    }
-    function gameOver(){ gameActive=false; showOver(); }
-
-    // reset
-    function restartGame(){
-      destroyAll("obstacle"); destroyAll("collectible"); destroyAll("cloud");
-      meters=0; saved=0; minuteTimer=0;
-      worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
-      shield=1; hero.invuln=0;
-      hero.pos=vec2(160,0); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
-    }
-
-    // top-right controls
-    document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
-    document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
-    document.getElementById("btnFS").onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
-
-    // start on the start screen initially
-    showStart();
   </script>
 </body>
 </html>
