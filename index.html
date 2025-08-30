@@ -6,6 +6,7 @@
   <title>Sylveons Quest</title>
   <style>
     html, body { margin:0; padding:0; height:100%; background:#ffd0ea; }
+    /* make the canvas fill the screen */
     #game { width:100vw; height:100vh; display:block; touch-action: manipulation; }
 
     .btnbar { position: fixed; top: 8px; right: 8px; z-index: 5; display:flex; gap:8px;
@@ -61,7 +62,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.5</div>
+    <div id="versionTag">Version v1.0.6</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -79,7 +80,10 @@
     <button id="btnPause">Pause</button>
     <button id="btnFS">Full screen</button>
   </div>
-  <div id="game"></div>
+
+  <!-- IMPORTANT: this is now a CANVAS, not a DIV -->
+  <canvas id="game"></canvas>
+
   <div class="credits">Works offline after first load</div>
 
   <!-- Local engine (no CDNs) -->
@@ -94,7 +98,7 @@
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
     // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.5)...");
+    dbg("Booting Sylveons Quest (v1.0.6)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     // Button wiring BEFORE game init (so we can see clicks even if init fails)
@@ -106,7 +110,6 @@
       try {
         if (typeof window.kaboom !== 'function') {
           dbg("Engine missing. Check that assets/kaboom.js exists (case-sensitive) and is being served.");
-          dbg("Expected path: /assets/kaboom.js");
           alert("Game engine not found. Please confirm assets/kaboom.js exists in your repo.");
           return;
         }
@@ -125,10 +128,16 @@
         hedgePink:[255,169,214],heroFallback:[255,182,238],munnaFallback:[255,163,213]};
       const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
 
-      // kaboom init
-      const k=kaboom({background:THEME.skyBottom,touchToMouse:true,global:true,
-        width:Math.min(window.innerWidth,1920),height:Math.min(window.innerHeight,1080),
-        canvas:document.getElementById("game"),scale:1});
+      // kaboom init — now targeting the <canvas id="game">
+      const k=kaboom({
+        background:THEME.skyBottom,
+        touchToMouse:true,
+        global:true,
+        width:Math.min(window.innerWidth,1920),
+        height:Math.min(window.innerHeight,1080),
+        canvas:document.getElementById("game"),
+        scale:1
+      });
       dbg("Kaboom initialised ✔︎");
 
       // DOM refs
