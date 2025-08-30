@@ -34,7 +34,7 @@
                    4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9); }
     #tryBtn { margin-top: 10px; }
 
-    /* Footer version tag inside the start screen so it's visible */
+    /* Version tag on start screen */
     #versionTag { margin-top: 12px; font: 12px/1.2 ui-sans-serif, system-ui; color:#fff;
       background:#00000033; padding:6px 8px; border-radius:8px; }
   </style>
@@ -50,7 +50,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.3</div>
+    <div id="versionTag">Version v1.0.4</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -69,7 +69,7 @@
   <div id="game"></div>
   <div class="credits">Works offline after first load</div>
 
-  <!-- Local engine (no external CDNs) -->
+  <!-- Local engine (no CDNs) -->
   <script src="assets/kaboom.js"></script>
 
   <!-- Full Game -->
@@ -96,8 +96,14 @@
     let kidMode=false,worldSpeed=SPEEDS.normalStart,minuteTimer=0,shield=1,gameActive=false;
 
     function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-    function startMode(isKid){ kidMode=!!isKid; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
-      worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; restartGame(); startScreen.style.display="none"; gameActive=true; }
+    function startMode(isKid){
+      kidMode=!!isKid;
+      document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
+      worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
+      restartGame();
+      startScreen.style.display="none";
+      gameActive=true;
+    }
     function showOver(){ gameActive=false; overScreen.style.display="flex"; }
 
     // physics
@@ -113,10 +119,14 @@
     }
     function makeCloudGround(x){
       return add([ pos(x,GROUND_Y),
-        { draw(){ pushTransform(); translate(this.pos);
-          drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
-          for(let i=0;i<Math.ceil(width()/80);i++){ pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform(); }
-          popTransform(); } },
+        { draw(){
+            pushTransform(); translate(this.pos);
+            drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
+            for(let i=0;i<Math.ceil(width()/80);i++){
+              pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform();
+            }
+            popTransform();
+          } },
         area({shape:new Rect(vec2(0,0),width(),40)}),
         move(LEFT,worldSpeed),
         "ground" ]);
@@ -126,33 +136,57 @@
       { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
       move(LEFT,rand(18,50)), "cloud" ]); });
 
-    // assets
-    loadSprite("hero","assets/hero.png").catch(()=>{});
-    loadSprite("munna","assets/munna.png").catch(()=>{});
-    loadSprite("hedge","assets/hedge.png").catch(()=>{});
+    // --- ASSETS: load & upgrade pattern (no crashing if missing) ---
+    // Start with placeholders; when a sprite finishes loading, swap it in.
+    let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
 
-    // hero
-    const hero=add([ pos(160,0), area(), body(), anchor("center"), "hero",
-      { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }, sprite("hero",{width:60,height:48}) ]);
-    if(!assets.get("sprite","hero")){ hero.use(rect(54,34)); hero.use(color(...THEME.heroFallback)); }
+    loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; if (hero.exists()) hero.use(sprite("hero",{width:60,height:48})); }).catch(()=>{});
+    loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
+    loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
+
+    // hero (start as a safe shape, upgrade if sprite loads)
+    const hero=add([
+      pos(160,0), area(), body(), anchor("center"), "hero",
+      { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
+    ]);
+    // visual: placeholder first
+    hero.use(rect(54,34));
+    hero.use(color(...THEME.heroFallback));
+    // if sprite already ready (cache), attach now; otherwise the .then above will attach later
+    if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
+
     hero.onGround(()=>hero.canDouble=true);
-    function doJump(){ if(!gameActive)return; if(hero.isGrounded()){ hero.jump(hero.jumpForce); hero.canDouble=true; }
-      else if(hero.canDouble){ hero.jump(hero.jumpForce*0.9); hero.canDouble=false; } }
+    function doJump(){
+      if(!gameActive) return;
+      if(hero.isGrounded()){
+        hero.jump(hero.jumpForce); hero.canDouble=true;
+      } else if(hero.canDouble){
+        hero.jump(hero.jumpForce*0.9); hero.canDouble=false;
+      }
+    }
     onClick(()=>doJump());
 
-    // spawns
+    // spawns (use sprite if available, else fall back to shapes)
     function spawnHedge(){
-      const f=chance(0.45);
+      const fly=chance(0.45);
       const w=rand(36,64), h=rand(28,48);
-      const y=f?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
+      const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
       const o=add([ pos(width()+rand(0,120),y), area(), move(LEFT,worldSpeed), "obstacle" ]);
-      if(assets.get("sprite","hedge")) o.use(sprite("hedge",{width:w,height:h})); else o.use(rect(w,h));
+      if (hedgeSpriteReady) {
+        o.use(sprite("hedge",{width:w,height:h}));
+      } else {
+        o.use(rect(w,h)); o.use(color(...THEME.hedgePink));
+      }
     }
     function spawnMunna(){
       const y=rand(GROUND_Y-260,GROUND_Y-90);
       const r=rand(14,kidMode?22:18);
       const c=add([ pos(width()+rand(0,60), y), area({shape:new Circle(vec2(0,0), r)}), move(LEFT,worldSpeed*1.05), "collectible" ]);
-      if(assets.get("sprite","munna")) c.use(sprite("munna",{width:r*2.4,height:r*2.2})); else c.use(circle(r));
+      if (munnaSpriteReady) {
+        c.use(sprite("munna",{width:r*2.4,height:r*2.2}));
+      } else {
+        c.use(circle(r)); c.use(color(...THEME.munnaFallback));
+      }
     }
     loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
 
