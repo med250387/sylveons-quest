@@ -6,7 +6,6 @@
   <title>Sylveons Quest</title>
   <style>
     html, body { margin:0; padding:0; height:100%; background:#ffd0ea; }
-    /* make the canvas fill the screen */
     #game { width:100vw; height:100vh; display:block; touch-action: manipulation; }
 
     .btnbar { position: fixed; top: 8px; right: 8px; z-index: 5; display:flex; gap:8px;
@@ -35,11 +34,9 @@
                    4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9); }
     #tryBtn { margin-top: 10px; }
 
-    /* Version tag on start screen */
     #versionTag { margin-top: 12px; font: 12px/1.2 ui-sans-serif, system-ui; color:#fff;
       background:#00000033; padding:6px 8px; border-radius:8px; }
 
-    /* Debug panel */
     #debug {
       position: fixed; top: 8px; left: 8px; z-index: 1200;
       width: min(90vw, 520px); max-height: 48vh; overflow:auto;
@@ -52,7 +49,6 @@
   </style>
 </head>
 <body>
-  <!-- Start Screen -->
   <section id="startScreen" class="screen">
     <h1 id="startTitle">Sylveons Quest</h1>
     <div>
@@ -62,10 +58,9 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.11</div>
+    <div id="versionTag">Version v1.0.12</div>
   </section>
 
-  <!-- Game Over Screen -->
   <section id="overScreen" class="screen">
     <h2 id="overTitle">Try again?</h2>
     <button id="tryBtn" class="yellowBtn">Tap to Restart</button>
@@ -73,7 +68,7 @@
 
   <div id="debug"></div>
 
-  <div class="badge">Sylveon Sky Run • Tap: Jump • Swipe: Left/Right</div>
+  <div class="badge">Sylveon Sky Run • Tap/Click: Jump • Swipe/Arrows: Move</div>
   <div class="btnbar">
     <button id="btnKid">Kid Mode: OFF</button>
     <button id="btnMute">Mute</button>
@@ -81,27 +76,22 @@
     <button id="btnFS">Full screen</button>
   </div>
 
-  <!-- This is a CANVAS -->
   <canvas id="game"></canvas>
 
   <div class="credits">Works offline after first load</div>
 
-  <!-- Local engine -->
   <script src="assets/kaboom.js"></script>
 
-  <!-- Full Game with diagnostics -->
   <script>
-    // ===== Debug helpers =====
+    // ===== Debug =====
     const $ = (id)=>document.getElementById(id);
     const dbgBox = $('debug');
-    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\n"); console.log(msg); }
+    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.11)...");
+    dbg("Booting Sylveons Quest (v1.0.12)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
-    // Button wiring BEFORE game init (so we can see clicks even if init fails)
     $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
     $('startStd').addEventListener('click', ()=>{ dbg("UI: Standard Mode clicked"); safeStart(false); });
     $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
@@ -109,8 +99,8 @@
     function safeStart(startKid){
       try {
         if (typeof window.kaboom !== 'function') {
-          dbg("Engine missing. Check that assets/kaboom.js exists (case-sensitive) and is being served.");
-          alert("Game engine not found. Please confirm assets/kaboom.js exists in your repo.");
+          dbg("Engine missing. Check assets/kaboom.js exists.");
+          alert("Game engine not found. Please confirm assets/kaboom.js exists.");
           return;
         }
         startGame(startKid);
@@ -119,16 +109,13 @@
       }
     }
 
-    // ===== Full Game =====
     function startGame(startKid){
       dbg("startGame() entered — kid=" + !!startKid);
 
-      const THEME={heroName:"Sylveon",collectNameSingular:"Munna",collectNamePlural:"Munnas",
-        skyTop:[255,208,234],skyBottom:[255,238,250],cloudColor:[255,255,255],
-        hedgePink:[255,169,214],heroFallback:[255,182,238],munnaFallback:[255,163,213]};
+      const THEME={skyTop:[255,208,234],skyBottom:[255,238,250], hedgePink:[255,169,214],
+                   heroFallback:[255,182,238], munnaFallback:[255,163,213]};
       const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
 
-      // kaboom init — target the <canvas id="game">
       const k=kaboom({
         background:THEME.skyBottom,
         touchToMouse:true,
@@ -140,61 +127,42 @@
       });
       dbg("Kaboom initialised ✔︎");
 
-      // DOM refs
       const startScreen=$('startScreen');
       const overScreen=$('overScreen');
 
-      // state
-      let kidMode=!!startKid,worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
-      let minuteTimer=0,shield=1,gameActive=false;
-      let started=false; // prevent double begin
+      let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
+      let minuteTimer=0, shield=1, gameActive=false, started=false;
 
-      // physics first
       setGravity(2000);
       const GROUND_Y=height()-80;
 
-      // cloud drawing helpers
-      function drawCloudBlob(s=1){
-        drawCircle(vec2(-40,-6),30*s, rgb(...THEME.cloudColor));
-        drawCircle(vec2(-10,-18),38*s,rgb(...THEME.cloudColor));
-        drawCircle(vec2(28,-8),32*s,rgb(...THEME.cloudColor));
-        drawCircle(vec2(56,-14),24*s,rgb(...THEME.cloudColor));
-      }
-      function makeCloudGround(x){
+      // --- Ground: two solid white slabs that scroll left
+      function makeGround(x){
         return add([
           pos(x,GROUND_Y),
-          // ---- the important fix: static body so the hero can land ----
+          rect(width(),40),
+          area(),
           body({ isStatic: true }),
-          area({ shape:new Rect(vec2(0,0), width(), 40) }),
+          color(255,255,255),
           move(LEFT,worldSpeed),
-          // visual
-          {
-            draw(){
-              pushTransform(); translate(this.pos);
-              drawRect({width:width(),height:40,pos:vec2(0,0),color:rgb(255,255,255)});
-              for(let i=0;i<Math.ceil(width()/80);i++){
-                pushTransform(); translate(vec2(i*80+20,-6)); drawCloudBlob(1); popTransform();
-              }
-              popTransform();
-            }
-          },
           "ground"
         ]);
       }
-      let groundA=makeCloudGround(0), groundB=makeCloudGround(width());
-      loop(1,()=>{ if(gameActive) add([ pos(width()+60,rand(20,height()*0.6)),
-        { draw(){ pushTransform(); translate(this.pos); scaleTo(vec2(rand(0.7,1.8))); drawCloudBlob(1); popTransform(); } },
-        move(LEFT,rand(18,50)), "cloud" ]); });
+      let groundA=makeGround(0), groundB=makeGround(width());
 
-      // ===== ASSETS: safe flags (no touching hero here) =====
+      // --- Assets (flags only; sprites optional)
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
-      loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
-      loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
+      loadSprite("hero","assets/hero.png").then(()=>heroSpriteReady=true).catch(()=>{});
+      loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
+      loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
 
-      // ===== HERO: create before any restart =====
+      // --- Hero
       const hero=add([
-        pos(160,0), area(), body(), anchor("center"), "hero",
+        pos(160,GROUND_Y-24), // start on the ground
+        area(),
+        body(),
+        anchor("center"),
+        "hero",
         { jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
       ]);
       hero.use(rect(54,34));
@@ -202,18 +170,35 @@
       if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
       hero.onGround(()=>hero.canDouble=true);
 
+      // --- Controls
       function doJump(){
         if(!gameActive) return;
-        if(hero.isGrounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; }
-        else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; }
+        if(hero.isGrounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; dbg("Jump"); }
+        else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; dbg("Double-jump"); }
       }
       onClick(()=>doJump());
 
-      // ===== SCORE & LABELS =====
+      // Swipe (touch) for iPad
+      let swipeStart=null;
+      window.addEventListener('touchstart',(e)=>{ swipeStart = e.touches[0].clientX; }, {passive:true});
+      window.addEventListener('touchmove',(e)=>{
+        if(!gameActive || swipeStart===null) return;
+        const dx = e.touches[0].clientX - swipeStart;
+        const s = 220;
+        if (dx > 30) hero.vx = +s;
+        else if (dx < -30) hero.vx = -s;
+      }, {passive:true});
+      window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
+
+      // Keyboard for Mac
+      onKeyDown(["left","a"], ()=>{ if(!gameActive) return; hero.vx = -260; });
+      onKeyDown(["right","d"],()=>{ if(!gameActive) return; hero.vx = 260; });
+      onKeyPress(["space","up","w"], ()=> doJump());
+
+      // --- Score & HUD
       let meters=0, saved=0;
       const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
       const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-      // tiny HUD for testing
       const hud=add([text("",{size:14}),pos(16,84),fixed(),color(20,20,20)]);
       function updateUI(){
         meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
@@ -221,7 +206,7 @@
         hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}`;
       }
 
-      // spawns (check flags at spawn time)
+      // --- Spawns
       function spawnHedge(){
         const fly=chance(0.45);
         const w=rand(36,64), h=rand(28,48);
@@ -239,56 +224,52 @@
       }
       loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
 
-      // scoring tick
+      // --- Game tick
       loop(1,()=>{ if(gameActive){ meters+=worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); } });
 
-      // update + failcheck
       onUpdate(()=>{
-        // scroll the two cloud grounds
+        // scroll ground strips
         [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
         if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
         if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
 
-        // keep hero inside lanes
+        // move hero left/right with friction
         hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
         hero.vx *= 0.9;
 
-        // fell off screen
-        if(gameActive && hero.pos.y > height()+60) hitObstacle();
+        if(gameActive && hero.pos.y > height()+60) hitObstacle(); // fell
       });
 
-      // collisions
+      // --- Collisions
       hero.onCollide("obstacle",()=>{ if(gameActive) hitObstacle(); });
       hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
 
-      // one free hit
       function hitObstacle(){
         if(hero.invuln>0) return;
         if(shield>0){
-          shield--; hero.invuln=1.5; updateUI();
-          wait(1.5,()=>{ hero.invuln=0; });
+          shield--; hero.invuln=1.5; updateUI(); wait(1.5,()=>{ hero.invuln=0; });
         } else { gameOver(); }
       }
       function gameOver(){ gameActive=false; showOver(); }
 
-      // reset (safe: hero & labels already exist)
-      function restartGame(){
+      // --- Reset & UI
+      function resetWorld(){
         try { destroyAll("obstacle"); } catch {}
         try { destroyAll("collectible"); } catch {}
-        try { destroyAll("cloud"); } catch {}
+      }
+      function restartGame(){
+        resetWorld();
         meters=0; saved=0; minuteTimer=0;
         worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
         shield=1; hero.invuln=0;
-        hero.pos=vec2(160,0); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+        hero.pos=vec2(160,GROUND_Y-24); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
         updateUI();
       }
 
-      // top-right controls
       document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
       document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
       document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-      // begin AFTER everything is defined
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
       function showOver(){ gameActive=false; overScreen.style.display="flex"; }
       function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display="none"; gameActive=true; }
