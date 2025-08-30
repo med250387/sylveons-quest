@@ -62,7 +62,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.9</div>
+    <div id="versionTag">Version v1.0.10</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -98,7 +98,7 @@
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
     // Startup logs
-    dbg("Booting Sylveons Quest (v1.0.9)...");
+    dbg("Booting Sylveons Quest (v1.0.10)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     // Button wiring BEFORE game init (so we can see clicks even if init fails)
@@ -147,6 +147,7 @@
       // state
       let kidMode=!!startKid,worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
       let minuteTimer=0,shield=1,gameActive=false;
+      let started=false; // prevent double begin
 
       // physics first
       setGravity(2000);
@@ -187,7 +188,8 @@
       // ===== HERO: create before any restart =====
       const hero=add([
         pos(160,0), area(), body(), anchor("center"), "hero",
-        { jumpForce:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
+        // NOTE: renamed from jumpForce -> jumpPower to avoid duplicate property collisions
+        { jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
       ]);
       hero.use(rect(54,34));
       hero.use(color(...THEME.heroFallback));
@@ -196,12 +198,12 @@
 
       function doJump(){
         if(!gameActive) return;
-        if(hero.isGrounded()){ hero.jump(hero.jumpForce); hero.canDouble=true; }
-        else if(hero.canDouble){ hero.jump(hero.jumpForce*0.9); hero.canDouble=false; }
+        if(hero.isGrounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; }
+        else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; }
       }
       onClick(()=>doJump());
 
-      // ===== SCORE & LABELS (now safe to use during restart) =====
+      // ===== SCORE & LABELS =====
       let meters=0, saved=0;
       const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
       const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
@@ -254,7 +256,9 @@
 
       // reset (safe: hero & labels already exist)
       function restartGame(){
-        destroyAll("obstacle"); destroyAll("collectible"); destroyAll("cloud");
+        try { destroyAll("obstacle"); } catch {}
+        try { destroyAll("collectible"); } catch {}
+        try { destroyAll("cloud"); } catch {}
         meters=0; saved=0; minuteTimer=0;
         worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
         shield=1; hero.invuln=0;
@@ -265,12 +269,12 @@
       // top-right controls
       document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
       document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
-      document.getElementById("btnFS").onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+      document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-      // ===== begin AFTER everything is defined =====
+      // begin AFTER everything is defined (with latch)
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
       function showOver(){ gameActive=false; overScreen.style.display="flex"; }
-      function begin(){ restartGame(); startScreen.style.display="none"; gameActive=true; }
+      function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display="none"; gameActive=true; }
       document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
       begin();
 
