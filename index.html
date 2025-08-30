@@ -46,9 +46,29 @@
       display: none;
     }
     #debug b { color:#a3003d; }
+
+    /* Tap-to-start overlay */
+    #tapStart {
+      position: fixed; inset: 0; display: none; z-index: 998;
+      background: rgba(0,0,0,0.35);
+      color: #fff; font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
+      text-align: center; align-items: center; justify-content: center; flex-direction: column;
+    }
+    #tapStart .panel {
+      background: rgba(255,255,255,0.85);
+      color: #ff4fa4;
+      padding: 18px 22px; border-radius: 16px;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.2);
+      font-weight: 900; font-size: clamp(22px, 4.5vw, 36px);
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    #tapStart .hint {
+      margin-top: 10px; color:#333; font: 14px/1.2 ui-sans-serif, system-ui;
+    }
   </style>
 </head>
 <body>
+  <!-- Start Screen -->
   <section id="startScreen" class="screen">
     <h1 id="startTitle">Sylveons Quest</h1>
     <div>
@@ -58,12 +78,19 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.12</div>
+    <div id="versionTag">Version v1.0.14</div>
   </section>
 
+  <!-- Game Over Screen -->
   <section id="overScreen" class="screen">
     <h2 id="overTitle">Try again?</h2>
     <button id="tryBtn" class="yellowBtn">Tap to Restart</button>
+  </section>
+
+  <!-- Tap to start overlay -->
+  <section id="tapStart" class="screen" style="display:none;">
+    <div class="panel">Tap to start</div>
+    <div class="hint">Click/Tap to jump • ←/A and →/D to move</div>
   </section>
 
   <div id="debug"></div>
@@ -80,8 +107,10 @@
 
   <div class="credits">Works offline after first load</div>
 
+  <!-- Local engine -->
   <script src="assets/kaboom.js"></script>
 
+  <!-- Game -->
   <script>
     // ===== Debug =====
     const $ = (id)=>document.getElementById(id);
@@ -89,7 +118,7 @@
     function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    dbg("Booting Sylveons Quest (v1.0.12)...");
+    dbg("Booting Sylveons Quest (v1.0.14)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
@@ -129,14 +158,16 @@
 
       const startScreen=$('startScreen');
       const overScreen=$('overScreen');
+      const tapStart=$('tapStart');
 
       let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
-      let minuteTimer=0, shield=1, gameActive=false, started=false;
+      let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
+      let graceFrames=120; // ~2 seconds after first input
 
       setGravity(2000);
       const GROUND_Y=height()-80;
 
-      // --- Ground: two solid white slabs that scroll left
+      // --- Ground (solid, visible)
       function makeGround(x){
         return add([
           pos(x,GROUND_Y),
@@ -144,13 +175,13 @@
           area(),
           body({ isStatic: true }),
           color(255,255,255),
-          move(LEFT,worldSpeed),
+          move(LEFT,0), // movement applied manually when active
           "ground"
         ]);
       }
       let groundA=makeGround(0), groundB=makeGround(width());
 
-      // --- Assets (flags only; sprites optional)
+      // --- Sprites (flags only)
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
       loadSprite("hero","assets/hero.png").then(()=>heroSpriteReady=true).catch(()=>{});
       loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
@@ -158,7 +189,7 @@
 
       // --- Hero
       const hero=add([
-        pos(160,GROUND_Y-24), // start on the ground
+        pos(160,GROUND_Y-24),
         area(),
         body(),
         anchor("center"),
@@ -176,11 +207,11 @@
         if(hero.isGrounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; dbg("Jump"); }
         else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; dbg("Double-jump"); }
       }
-      onClick(()=>doJump());
+      onClick(()=>{ if (awaitingStart) firstStart(); else doJump(); });
 
-      // Swipe (touch) for iPad
+      // Touch swipe for iPad
       let swipeStart=null;
-      window.addEventListener('touchstart',(e)=>{ swipeStart = e.touches[0].clientX; }, {passive:true});
+      window.addEventListener('touchstart',(e)=>{ swipeStart = e.touches[0].clientX; if (awaitingStart) firstStart(); }, {passive:true});
       window.addEventListener('touchmove',(e)=>{
         if(!gameActive || swipeStart===null) return;
         const dx = e.touches[0].clientX - swipeStart;
@@ -191,11 +222,11 @@
       window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
 
       // Keyboard for Mac
-      onKeyDown(["left","a"], ()=>{ if(!gameActive) return; hero.vx = -260; });
-      onKeyDown(["right","d"],()=>{ if(!gameActive) return; hero.vx = 260; });
-      onKeyPress(["space","up","w"], ()=> doJump());
+      onKeyDown(["left","a"], ()=>{ if(awaitingStart){ firstStart(); } if(!gameActive) return; hero.vx = -260; });
+      onKeyDown(["right","d"],()=>{ if(awaitingStart){ firstStart(); } if(!gameActive) return; hero.vx = 260; });
+      onKeyPress(["space","up","w"], ()=>{ if (awaitingStart) firstStart(); else doJump(); });
 
-      // --- Score & HUD
+      // --- HUD
       let meters=0, saved=0;
       const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
       const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
@@ -203,45 +234,62 @@
       function updateUI(){
         meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
         savedLabel.text=`Munnas: ${saved}`;
-        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}`;
+        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
       }
 
-      // --- Spawns
+      // --- Spawns (rect hitboxes only)
       function spawnHedge(){
         const fly=chance(0.45);
         const w=rand(36,64), h=rand(28,48);
         const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
-        const o=add([ pos(width()+rand(0,120),y), area(), move(LEFT,worldSpeed), "obstacle" ]);
+        const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), "obstacle" ]);
         if (hedgeSpriteReady) o.use(sprite("hedge",{width:w,height:h}));
-        else { o.use(rect(w,h)); o.use(color(...THEME.hedgePink)); }
       }
       function spawnMunna(){
         const y=rand(GROUND_Y-260,GROUND_Y-90);
-        const r=rand(14,kidMode?22:18);
-        const c=add([ pos(width()+rand(0,60), y), area({shape:new Circle(vec2(0,0), r)}), move(LEFT,worldSpeed*1.05), "collectible" ]);
-        if (munnaSpriteReady) c.use(sprite("munna",{width:r*2.4,height:r*2.2}));
-        else { c.use(circle(r)); c.use(color(...THEME.munnaFallback)); }
+        const s=rand(20, kidMode?28:24);
+        const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), "collectible" ]);
+        if (munnaSpriteReady) c.use(sprite("munna",{width:s,height:s}));
       }
-      loop(1,()=>{ if(gameActive){ if(chance(kidMode?0.55:0.7)) spawnHedge(); if(chance(kidMode?0.75:0.6)) spawnMunna(); } });
 
       // --- Game tick
-      loop(1,()=>{ if(gameActive){ meters+=worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); } });
+      loop(1,()=>{
+        if(!gameActive) return;
+        meters += worldSpeed/60;
+        minuteTimer++;
+        if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp;
+        updateUI();
+      });
 
       onUpdate(()=>{
-        // scroll ground strips
-        [groundA,groundB].forEach(g=>g.move(LEFT,gameActive?worldSpeed:0));
+        // scroll ground strips only when active
+        const vx = gameActive ? worldSpeed : 0;
+        [groundA,groundB].forEach(g=>g.move(LEFT, vx));
         if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
         if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
 
         // move hero left/right with friction
-        hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
-        hero.vx *= 0.9;
+        if (gameActive) {
+          hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
+          hero.vx *= 0.9;
+        }
 
-        if(gameActive && hero.pos.y > height()+60) hitObstacle(); // fell
+        // spawn logic
+        if (gameActive) {
+          if (graceFrames > 0) {
+            graceFrames--;
+          } else {
+            if (chance(kidMode?0.55:0.7)) spawnHedge();
+            if (chance(kidMode?0.75:0.6)) spawnMunna();
+          }
+        }
+
+        // fell
+        if(gameActive && hero.pos.y > height()+60) hitObstacle();
       });
 
       // --- Collisions
-      hero.onCollide("obstacle",()=>{ if(gameActive) hitObstacle(); });
+      hero.onCollide("obstacle",()=>{ if(gameActive && graceFrames<=0) hitObstacle(); });
       hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
 
       function hitObstacle(){
@@ -252,7 +300,7 @@
       }
       function gameOver(){ gameActive=false; showOver(); }
 
-      // --- Reset & UI
+      // --- Start / Reset UI
       function resetWorld(){
         try { destroyAll("obstacle"); } catch {}
         try { destroyAll("collectible"); } catch {}
@@ -263,20 +311,39 @@
         worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
         shield=1; hero.invuln=0;
         hero.pos=vec2(160,GROUND_Y-24); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+        graceFrames = 120;
         updateUI();
       }
 
-      document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; };
-      document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; };
+      document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; updateUI(); };
+      document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; updateUI(); };
       document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-      function showOver(){ gameActive=false; overScreen.style.display="flex"; }
-      function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display="none"; gameActive=true; }
+      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; tapStart.style.display="none"; }
+      function showOver(){ gameActive=false; overScreen.style.display="flex"; tapStart.style.display="none"; }
+      function begin(){
+        if(started) return; started=true;
+        restartGame();
+        startScreen.style.display="none";
+        awaitingStart = true;
+        tapStart.style.display = "flex";   // show “Tap to start”
+        gameActive = false;                // not active until first input
+        updateUI();
+      }
+
+      // first input -> start
+      function firstStart(){
+        if (!awaitingStart) return;
+        awaitingStart = false;
+        tapStart.style.display = "none";
+        gameActive = true;
+        updateUI();
+      }
+
       document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
       begin();
 
-      dbg("Game started ✔︎");
+      dbg("Game started (awaiting first tap) ✔︎");
     }
   </script>
 </body>
