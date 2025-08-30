@@ -34,7 +34,6 @@
                    4px 4px 0 rgba(0,0,0,0.08), 0 0 20px rgba(255,255,255,0.9); }
     #tryBtn { margin-top: 10px; }
 
-    /* status/error line */
     #status { position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
       background:#fff3f8; color:#a3003d; border:1px solid #ffa4c7; border-radius:12px;
       padding:8px 12px; font: 14px/1.2 ui-sans-serif,system-ui; display:none; z-index: 1200; }
@@ -48,7 +47,9 @@
       <button id="startKid" class="yellowBtn">Kid Mode</button>
       <button id="startStd" class="yellowBtn">Standard Mode</button>
     </div>
-    <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">If nothing happens, give it a refresh. We’ll auto-retry the game engine.</p>
+    <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
+      If nothing happens, hard-refresh (⌘⇧R). On iPad: hold the reload button → “Reload Without Content Blockers”.
+    </p>
   </section>
 
   <!-- Game Over Screen -->
@@ -68,43 +69,71 @@
   <div id="game"></div>
   <div class="credits">Works offline after first load</div>
 
-  <!-- Dynamic multi-CDN loader -->
+  <!-- Multi-CDN loader with timeout per attempt -->
   <script>
     const $ = (id)=>document.getElementById(id);
     const statusEl = $('status');
     function setStatus(msg, show=true){ statusEl.textContent = msg; statusEl.style.display = show ? 'block' : 'none'; }
 
-    // show we see button clicks even before the engine
-    $('startKid').addEventListener('click', ()=>setStatus('Kid Mode clicked — loading engine…'));
-    $('startStd').addEventListener('click', ()=>setStatus('Standard Mode clicked — loading engine…'));
+    const ENGINE_URLS = [
+      'https://unpkg.com/kaboom@3000.1.15/dist/kaboom.js',
+      'https://cdn.jsdelivr.net/npm/kaboom@3000.1.15/dist/kaboom.js',
+      'https://fastly.jsdelivr.net/npm/kaboom@3000.1.15/dist/kaboom.js',
+      'https://gcore.jsdelivr.net/npm/kaboom@3000.1.15/dist/kaboom.js',
+      'https://kaboomjs.com/lib/3000/kaboom.js'
+    ];
 
-    (function loadKaboomWithFallback() {
-      const urls = [
-        'https://unpkg.com/kaboom@3000.1.15/dist/kaboom.js',
-        'https://cdn.jsdelivr.net/npm/kaboom@3000.1.15/dist/kaboom.js',
-        'https://kaboomjs.com/lib/3000/kaboom.js'
-      ];
-      let i = 0;
-      function tryNext(){
-        if (i >= urls.length){
-          setStatus('Could not load the game engine. If you use a content blocker or strict DNS, allow unpkg/jsDelivr/kaboomjs.com and refresh.');
-          return;
-        }
-        const src = urls[i++];
-        setStatus('Loading game engine… (' + src + ')');
+    async function loadScriptWithTimeout(src, timeoutMs){
+      return new Promise((resolve, reject)=>{
         const s = document.createElement('script');
-        s.src = src; s.async = true;
-        s.onload = () => { setStatus('Engine loaded ✓', false); startGame(); };
-        s.onerror = () => { setStatus('Failed: ' + src + ' — trying another…'); tryNext(); };
+        let done = false;
+        const timer = setTimeout(()=>{
+          if (done) return;
+          done = true;
+          s.remove();
+          reject(new Error('timeout'));
+        }, timeoutMs);
+
+        s.src = src;
+        s.async = true;
+        s.onload = ()=>{ if (done) return; done = true; clearTimeout(timer); resolve(); };
+        s.onerror = ()=>{ if (done) return; done = true; clearTimeout(timer); reject(new Error('error')); };
         document.head.appendChild(s);
+      });
+    }
+
+    async function ensureEngine(){
+      for (let i=0; i<ENGINE_URLS.length; i++){
+        const src = ENGINE_URLS[i];
+        setStatus('Loading game engine… (' + src + ')');
+        try {
+          await loadScriptWithTimeout(src, 6000); // 6s per attempt
+          setStatus('Engine loaded ✓', false);
+          return true;
+        } catch (e){
+          setStatus('Failed: ' + src + ' — trying another…');
+        }
       }
-      tryNext();
-    })();
+      setStatus('Could not load the game engine. Disable content blockers / strict DNS for unpkg/jsDelivr/kaboomjs.com, then reload.');
+      return false;
+    }
+
+    // Pre-wire buttons so you see feedback immediately
+    $('startKid').addEventListener('click', async ()=>{
+      setStatus('Kid Mode clicked — loading engine…');
+      if (await ensureEngine()) startGame(true);
+    });
+    $('startStd').addEventListener('click', async ()=>{
+      setStatus('Standard Mode clicked — loading engine…');
+      if (await ensureEngine()) startGame(false);
+    });
+    $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
+
   </script>
 
   <!-- Game boot (runs after kaboom loads) -->
   <script>
-    function startGame(){
+    function startGame(startKid){
       const THEME = {
         heroName: "Sylveon",
         collectNameSingular: "Munna",
@@ -128,17 +157,17 @@
         scale: 1,
       });
 
-      let kidMode=false, worldSpeed=SPEEDS.normalStart, minuteTimer=0, shield=1, gameActive=false;
+      let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart, minuteTimer=0, shield=1, gameActive=false;
       const rr=(a,b)=>rand(a,b);
 
       const startScreen=document.getElementById("startScreen");
       const overScreen=document.getElementById("overScreen");
-      document.getElementById("startKid").onclick=()=>startMode(true);
-      document.getElementById("startStd").onclick=()=>startMode(false);
-      document.getElementById("tryBtn").onclick=()=>showStart();
+      document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
+
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; }
-      function startMode(isKid){ kidMode=!!isKid; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart; restartGame(); startScreen.style.display="none"; gameActive=true; }
       function showOver(){ gameActive=false; overScreen.style.display="flex"; }
+      function begin(){ restartGame(); startScreen.style.display="none"; gameActive=true; }
+      begin();
 
       setGravity(2000);
       const GROUND_Y=height()-80;
@@ -249,9 +278,6 @@
         setTimeout(playLoop, beat*1000*8);
       }
       document.getElementById("btnMute").onclick=()=>{ isMuted=!isMuted; document.getElementById("btnMute").textContent = isMuted ? "Unmute" : "Mute"; if(masterGain) masterGain.gain.value = isMuted ? 0 : 0.12; };
-
-      // show start screen
-      showStart();
     }
   </script>
 </body>
