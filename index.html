@@ -47,15 +47,16 @@
     }
     #debug b { color:#a3003d; }
 
-    /* Tap-to-start overlay */
+    /* Tap-to-start overlay (translucent so you can see the world) */
     #tapStart {
       position: fixed; inset: 0; display: none; z-index: 998;
-      background: rgba(0,0,0,0.35);
+      background: rgba(0,0,0,0.25);           /* MORE transparent */
       color: #fff; font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
       text-align: center; align-items: center; justify-content: center; flex-direction: column;
+      cursor: pointer;                         /* clicking the overlay starts the game */
     }
     #tapStart .panel {
-      background: rgba(255,255,255,0.85);
+      background: rgba(255,255,255,0.9);
       color: #ff4fa4;
       padding: 18px 22px; border-radius: 16px;
       box-shadow: 0 10px 22px rgba(0,0,0,0.2);
@@ -78,7 +79,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.14</div>
+    <div id="versionTag">Version v1.0.16</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -118,7 +119,7 @@
     function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    dbg("Booting Sylveons Quest (v1.0.14)...");
+    dbg("Booting Sylveons Quest (v1.0.16)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
@@ -162,24 +163,43 @@
 
       let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
       let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
-      let graceFrames=120; // ~2 seconds after first input
+      let graceFrames=120; // ~2s after first input
 
       setGravity(2000);
-      const GROUND_Y=height()-80;
+      const GROUND_H=120;
+      const GROUND_Y=height()-GROUND_H;
 
-      // --- Ground (solid, visible)
+      // --- Ground (taller & bright)
       function makeGround(x){
         return add([
           pos(x,GROUND_Y),
-          rect(width(),40),
+          rect(width(),GROUND_H),
           area(),
           body({ isStatic: true }),
           color(255,255,255),
-          move(LEFT,0), // movement applied manually when active
+          move(LEFT,0), // we’ll push manually
           "ground"
         ]);
       }
       let groundA=makeGround(0), groundB=makeGround(width());
+
+      // --- Decorative big clouds so the world is OBVIOUS
+      function puffyCloud(x,y,s){
+        add([
+          pos(x,y),
+          { draw(){
+              pushTransform(); translate(this.pos); scaleTo(vec2(s));
+              drawCircle(vec2(-30,-6),28, rgb(255,255,255));
+              drawCircle(vec2(0,-16),38, rgb(255,255,255));
+              drawCircle(vec2(36,-10),30, rgb(255,255,255));
+              drawCircle(vec2(60,-18),22, rgb(255,255,255));
+              popTransform();
+          }},
+          move(LEFT, 20),
+          "bgcloud"
+        ]);
+      }
+      for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
 
       // --- Sprites (flags only)
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
@@ -187,9 +207,9 @@
       loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
       loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
 
-      // --- Hero
+      // --- Hero (visible right away)
       const hero=add([
-        pos(160,GROUND_Y-24),
+        pos(160,GROUND_Y-30),
         area(),
         body(),
         anchor("center"),
@@ -207,6 +227,17 @@
         if(hero.isGrounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; dbg("Jump"); }
         else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; dbg("Double-jump"); }
       }
+      // Start handlers
+      function firstStart(){
+        if (!awaitingStart) return;
+        awaitingStart = false;
+        tapStart.style.display = "none";
+        gameActive = true;
+        updateUI();
+      }
+      // Overlay clickable to start
+      tapStart.addEventListener('click', firstStart, {passive:true});
+      // Canvas click starts (or jumps)
       onClick(()=>{ if (awaitingStart) firstStart(); else doJump(); });
 
       // Touch swipe for iPad
@@ -221,10 +252,16 @@
       }, {passive:true});
       window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
 
-      // Keyboard for Mac
-      onKeyDown(["left","a"], ()=>{ if(awaitingStart){ firstStart(); } if(!gameActive) return; hero.vx = -260; });
-      onKeyDown(["right","d"],()=>{ if(awaitingStart){ firstStart(); } if(!gameActive) return; hero.vx = 260; });
-      onKeyPress(["space","up","w"], ()=>{ if (awaitingStart) firstStart(); else doJump(); });
+      // Keyboard for Mac (listen on document so overlay focus doesn’t matter)
+      document.addEventListener('keydown', (ev)=>{
+        const key = ev.key.toLowerCase();
+        const startKeys = [' ', 'arrowup', 'w', 'arrowleft', 'a', 'arrowright', 'd'];
+        if (awaitingStart && startKeys.includes(key)) { firstStart(); return; }
+        if (!gameActive) return;
+        if (key === 'arrowleft' || key === 'a') hero.vx = -260;
+        if (key === 'arrowright' || key === 'd') hero.vx = 260;
+        if (key === ' ' || key === 'arrowup' || key === 'w') doJump();
+      });
 
       // --- HUD
       let meters=0, saved=0;
@@ -274,6 +311,9 @@
           hero.vx *= 0.9;
         }
 
+        // Decorations move even while waiting (slow)
+        if (awaitingStart) every(2, ()=>{}); // noop to keep kaboom happy
+
         // spawn logic
         if (gameActive) {
           if (graceFrames > 0) {
@@ -304,13 +344,14 @@
       function resetWorld(){
         try { destroyAll("obstacle"); } catch {}
         try { destroyAll("collectible"); } catch {}
+        try { destroyAll("bgcloud"); } catch {}
       }
       function restartGame(){
         resetWorld();
         meters=0; saved=0; minuteTimer=0;
         worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
         shield=1; hero.invuln=0;
-        hero.pos=vec2(160,GROUND_Y-24); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+        hero.pos=vec2(160,GROUND_Y-30); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
         graceFrames = 120;
         updateUI();
       }
@@ -323,20 +364,11 @@
       function showOver(){ gameActive=false; overScreen.style.display="flex"; tapStart.style.display="none"; }
       function begin(){
         if(started) return; started=true;
-        restartGame();
+        restartGame();                         // world is visible **now**
         startScreen.style.display="none";
         awaitingStart = true;
-        tapStart.style.display = "flex";   // show “Tap to start”
-        gameActive = false;                // not active until first input
-        updateUI();
-      }
-
-      // first input -> start
-      function firstStart(){
-        if (!awaitingStart) return;
-        awaitingStart = false;
-        tapStart.style.display = "none";
-        gameActive = true;
+        tapStart.style.display = "flex";       // translucent overlay on top
+        gameActive = false;                    // waits for first input
         updateUI();
       }
 
