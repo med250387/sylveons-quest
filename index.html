@@ -79,7 +79,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.18</div>
+    <div id="versionTag">Version v1.0.19</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -108,10 +108,8 @@
 
   <div class="credits">Works offline after first load</div>
 
-  <!-- Local engine -->
   <script src="assets/kaboom.js"></script>
 
-  <!-- Game -->
   <script>
     // ===== Debug =====
     const $ = (id)=>document.getElementById(id);
@@ -119,7 +117,7 @@
     function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    dbg("Booting Sylveons Quest (v1.0.18)...");
+    dbg("Booting Sylveons Quest (v1.0.19)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
@@ -165,23 +163,22 @@
       let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
       let graceFrames=120; // ~2s after first input
 
-      setGravity(2000);
+      // === World constants
+      const GRAV=2000;
       const GROUND_H=120;
       const GROUND_Y=height()-GROUND_H;
 
-      // --- Ground (tall + solid on old Kaboom)
-      function makeGround(x){
+      // --- Draw ground strips (visual only)
+      function makeGroundVisual(x){
         return add([
           pos(x,GROUND_Y),
           rect(width(),GROUND_H),
-          area(),
-          solid(),                  // <- critical for your kaboom.js
           color(255,255,255),
           move(LEFT,0),
-          "ground"
+          "groundvis"
         ]);
       }
-      let groundA=makeGround(0), groundB=makeGround(width());
+      let groundA=makeGroundVisual(0), groundB=makeGroundVisual(width());
 
       // --- Background clouds (visible while waiting)
       function puffyCloud(x,y,s){
@@ -207,25 +204,23 @@
       loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
       loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
 
-      // --- Hero
+      // --- Hero (manual physics)
       const hero=add([
         pos(160,GROUND_Y-30),
         rect(54,34),
         area(),
-        body(),                    // dynamic body uses gravity
         color(...THEME.heroFallback),
         anchor("center"),
         "hero",
-        { jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0 }
+        { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
       ]);
       if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
-      hero.onGround(()=>hero.canDouble=true);
 
       // --- Controls
       function doJump(){
         if(!gameActive) return;
-        if(hero.grounded()){ hero.jump(hero.jumpPower); hero.canDouble=true; dbg("Jump"); } // .grounded() in older kaboom
-        else if(hero.canDouble){ hero.jump(hero.jumpPower*0.9); hero.canDouble=false; dbg("Double-jump"); }
+        if(hero.onGround){ hero.vy = -hero.jumpPower; hero.onGround=false; hero.canDouble=true; dbg("Jump"); }
+        else if(hero.canDouble){ hero.vy = -hero.jumpPower*0.9; hero.canDouble=false; dbg("Double-jump"); }
       }
       function firstStart(){
         if (!awaitingStart) return;
@@ -249,7 +244,7 @@
       }, {passive:true});
       window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
 
-      // Keyboard (document-level so overlay focus doesn’t matter)
+      // Keyboard (document-level)
       document.addEventListener('keydown', (ev)=>{
         const key = ev.key.toLowerCase();
         const startKeys = [' ', 'arrowup', 'w', 'arrowleft', 'a', 'arrowright', 'd'];
@@ -302,8 +297,22 @@
         if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
         if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
 
-        // move hero left/right with friction
         if (gameActive) {
+          // manual gravity
+          hero.vy += GRAV * dt();
+          hero.pos.y += hero.vy * dt();
+
+          // clamp to ground
+          const floorY = GROUND_Y - 30; // hero half-height approx
+          if (hero.pos.y > floorY) {
+            hero.pos.y = floorY;
+            hero.vy = 0;
+            if (!hero.onGround) { hero.onGround = true; hero.canDouble = true; }
+          } else {
+            hero.onGround = false;
+          }
+
+          // horizontal move with friction
           hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
           hero.vx *= 0.9;
         }
@@ -318,13 +327,13 @@
           }
         }
 
-        // fell off the bottom?
-        if(gameActive && hero.pos.y > height()+60) hitObstacle();
+        // fell off the world (shouldn't happen with clamp, but safety)
+        if(gameActive && hero.pos.y > height()+60) gameOver();
       });
 
-      // --- Collisions
-      hero.onCollide("obstacle",()=>{ if(gameActive && graceFrames<=0) hitObstacle(); });
-      hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
+      // --- Collisions (area-based)
+      hero.onCollide && hero.onCollide("obstacle",()=>{ if(gameActive && graceFrames<=0) hitObstacle(); });
+      hero.onCollide && hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
 
       function hitObstacle(){
         if(hero.invuln>0) return;
@@ -345,7 +354,7 @@
         meters=0; saved=0; minuteTimer=0;
         worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
         shield=1; hero.invuln=0;
-        hero.pos=vec2(160,GROUND_Y-30); hero.vel=vec2(0,0); hero.vx=0; hero.canDouble=false;
+        hero.pos=vec2(160,GROUND_Y-30); hero.vy=0; hero.vx=0; hero.canDouble=false; hero.onGround=true;
         graceFrames = 120;
         updateUI();
       }
