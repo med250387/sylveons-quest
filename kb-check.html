@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kaboom Check</title>
+<style>
+  html,body { margin:0;height:100%; background:#222; color:#fff; font:16px/1.4 -apple-system, BlinkMacSystemFont; }
+  #log { position: fixed; top:8px; left:8px; background:#fff3; padding:8px 10px; border-radius:10px; max-width:60ch; white-space:pre-wrap; }
+</style>
+<div id="log">Booting…</div>
+<canvas id="game"></canvas>
+<script>
+  const log = document.getElementById('log');
+  const say = (m)=>{ log.textContent += "\n" + m; console.log(m); };
+  window.addEventListener('error', e => say("Error: " + e.message));
+</script>
+<script src="assets/kaboom.js"></script>
+<script>
+try {
+  say("kaboom typeof: " + typeof window.kaboom);
+  if (typeof window.kaboom !== 'function') throw new Error("kaboom() missing");
+  const k = kaboom({ global:true, canvas: document.getElementById('game'), width: 800, height: 480, background: [255, 208, 234] });
+  say("kaboom init ✔︎");
+  const GROUND_Y = height() - 100;
+  add([ pos(0,GROUND_Y), rect(width(),100), color(255,255,255) ]);
+  add([ pos(120,GROUND_Y-30), rect(54,34), color(255,182,238) ]);
+  add([ text("If you see pink sky, white ground, pink rectangle – engine OK", { size: 24 }), pos(20,30) ]);
+  say("drawn basic shapes ✔︎");
+} catch (err) {
+  say("Failed: " + err.message);
+}
+</script>
