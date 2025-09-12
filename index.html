@@ -79,7 +79,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.20</div>
+    <div id="versionTag">Version v1.0.21</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -108,7 +108,7 @@
 
   <div class="credits">Works offline after first load</div>
 
-  <script src="assets/kaboom.js"></script>
+  <script src="assets/kaboom.js?v=1021"></script>
 
   <script>
     // ===== Debug =====
@@ -186,7 +186,7 @@
           pos(x,y),
           { draw(){
               pushTransform(); translate(this.pos); /* scaleTo is not a built-in in all kaboom builds */
-              scale(vec2(s));
+              scale(vec2(s)); // keep simple scale; older kaboom builds choke on custom props
               drawCircle(vec2(-30,-6),28, rgb(255,255,255));
               drawCircle(vec2(0,-16),38, rgb(255,255,255));
               drawCircle(vec2(36,-10),30, rgb(255,255,255));
@@ -199,11 +199,14 @@
       }
       for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
 
-      // --- Sprites (flags only)
+      // --- Sprites (feature-flag so we can isolate crashes)
+      const USE_SPRITES = false; // set to true once stable
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-      loadSprite("hero","assets/hero.png").then(()=>heroSpriteReady=true).catch(()=>{});
-      loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
-      loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
+      if (USE_SPRITES) {
+        loadSprite("hero","assets/hero.png").then(()=>heroSpriteReady=true).catch(()=>{});
+        loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
+        loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
+      }
 
       // --- Hero (manual physics)
       const hero=add([
@@ -216,7 +219,7 @@
         { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
       ]);
       // IMPORTANT: don't pass width/height to sprite() — some kaboom builds throw when unknown props are provided
-      if (heroSpriteReady) hero.use(sprite("hero"));
+      if (USE_SPRITES && heroSpriteReady) { try { hero.use(sprite("hero")); } catch(e) { dbg("sprite(hero) failed: "+e.message); } }
 
       // --- Controls
       function doJump(){
@@ -274,13 +277,13 @@
         const w=rand(36,64), h=rand(28,48);
         const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
         const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), "obstacle" ]);
-        if (hedgeSpriteReady) o.use(sprite("hedge"));
+        if (USE_SPRITES && hedgeSpriteReady) { try { o.use(sprite("hedge")); } catch(e) { dbg("sprite(hedge) failed: "+e.message); } }
       }
       function spawnMunna(){
         const y=rand(GROUND_Y-260,GROUND_Y-90);
         const s=rand(20, kidMode?28:24);
         const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), "collectible" ]);
-        if (munnaSpriteReady) c.use(sprite("munna"));
+        if (USE_SPRITES && munnaSpriteReady) { try { c.use(sprite("munna")); } catch(e) { dbg("sprite(munna) failed: "+e.message); } }
       }
 
       // --- Game tick
