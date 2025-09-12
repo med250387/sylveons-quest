@@ -79,7 +79,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.19</div>
+    <div id="versionTag">Version v1.0.20</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -117,7 +117,7 @@
     function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\n"); console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    dbg("Booting Sylveons Quest (v1.0.19)...");
+    dbg("Booting Sylveons Quest (v1.0.20)...");
     dbg("Checking engine: " + (typeof window.kaboom));
 
     $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
@@ -185,7 +185,8 @@
         add([
           pos(x,y),
           { draw(){
-              pushTransform(); translate(this.pos); scaleTo(vec2(s));
+              pushTransform(); translate(this.pos); /* scaleTo is not a built-in in all kaboom builds */
+              scale(vec2(s));
               drawCircle(vec2(-30,-6),28, rgb(255,255,255));
               drawCircle(vec2(0,-16),38, rgb(255,255,255));
               drawCircle(vec2(36,-10),30, rgb(255,255,255));
@@ -214,7 +215,8 @@
         "hero",
         { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
       ]);
-      if (heroSpriteReady) hero.use(sprite("hero",{width:60,height:48}));
+      // IMPORTANT: don't pass width/height to sprite() — some kaboom builds throw when unknown props are provided
+      if (heroSpriteReady) hero.use(sprite("hero"));
 
       // --- Controls
       function doJump(){
@@ -272,13 +274,13 @@
         const w=rand(36,64), h=rand(28,48);
         const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
         const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), "obstacle" ]);
-        if (hedgeSpriteReady) o.use(sprite("hedge",{width:w,height:h}));
+        if (hedgeSpriteReady) o.use(sprite("hedge"));
       }
       function spawnMunna(){
         const y=rand(GROUND_Y-260,GROUND_Y-90);
         const s=rand(20, kidMode?28:24);
         const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), "collectible" ]);
-        if (munnaSpriteReady) c.use(sprite("munna",{width:s,height:s}));
+        if (munnaSpriteReady) c.use(sprite("munna"));
       }
 
       // --- Game tick
