@@ -70,7 +70,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.25</div>
+    <div id="versionTag">Version v1.0.26</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -194,8 +194,8 @@
       // --- Sprites behind a flag (keep false until stable)
       const USE_SPRITES = true;
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-      // Always start loading; we'll attach when ready
-      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; if (USE_SPRITES && hero.exists()) { try { hero.use(sprite("hero")); } catch(e) { dbg("sprite(hero) failed: "+e.message); } } }).catch(()=>{});
+      // Load sprites but don't touch the hero reference here (can fire before hero exists)
+      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
       loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
       loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{}););
         loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
@@ -212,7 +212,14 @@
         "hero",
         { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
       ]);
-      if (USE_SPRITES && heroSpriteReady) { try { hero.use(sprite("hero")); } catch(e) { dbg("sprite(hero) failed: "+e.message); } } catch(e) { dbg("sprite(hero) failed: "+e.message); } }
+      // Attach sprite once it's safe (handles cache-fast loads before hero exists)
+      let heroSpriteApplied = false;
+      if (USE_SPRITES && heroSpriteReady) { try { hero.use(sprite("hero")); heroSpriteApplied = true; } catch(e) { dbg("sprite(hero) immediate failed: "+e.message); } }
+      onUpdate(() => {
+        if (!heroSpriteApplied && USE_SPRITES && heroSpriteReady && hero.exists()) {
+          try { hero.use(sprite("hero")); heroSpriteApplied = true; } catch(e) { dbg("sprite(hero) later failed: "+e.message); }
+        }
+      }); catch(e) { dbg("sprite(hero) failed: "+e.message); } } catch(e) { dbg("sprite(hero) failed: "+e.message); } }
 
       // --- Controls
       function doJump(){
