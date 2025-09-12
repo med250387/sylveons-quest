@@ -47,25 +47,16 @@
     }
     #debug b { color:#a3003d; }
 
-    /* Tap-to-start overlay (translucent so you can see the world) */
-    #tapStart {
-      position: fixed; inset: 0; display: none; z-index: 998;
-      background: rgba(0,0,0,0.25);
-      color: #fff; font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
+    /* Tap-to-start overlay */
+    #tapStart { position: fixed; inset: 0; display: none; z-index: 998;
+      background: rgba(0,0,0,0.25); color: #fff;
+      font-family: "Comic Sans MS", "Baloo 2", "Fredoka", system-ui, -apple-system, sans-serif;
       text-align: center; align-items: center; justify-content: center; flex-direction: column;
-      cursor: pointer;
-    }
-    #tapStart .panel {
-      background: rgba(255,255,255,0.9);
-      color: #ff4fa4;
-      padding: 18px 22px; border-radius: 16px;
-      box-shadow: 0 10px 22px rgba(0,0,0,0.2);
-      font-weight: 900; font-size: clamp(22px, 4.5vw, 36px);
-      text-transform: uppercase; letter-spacing: 1px;
-    }
-    #tapStart .hint {
-      margin-top: 10px; color:#333; font: 14px/1.2 ui-sans-serif, system-ui;
-    }
+      cursor: pointer; }
+    #tapStart .panel { background: rgba(255,255,255,0.9); color: #ff4fa4; padding: 18px 22px;
+      border-radius: 16px; box-shadow: 0 10px 22px rgba(0,0,0,0.2); font-weight: 900;
+      font-size: clamp(22px, 4.5vw, 36px); text-transform: uppercase; letter-spacing: 1px; }
+    #tapStart .hint { margin-top: 10px; color:#333; font: 14px/1.2 ui-sans-serif, system-ui; }
   </style>
 </head>
 <body>
@@ -73,13 +64,13 @@
   <section id="startScreen" class="screen">
     <h1 id="startTitle">Sylveons Quest</h1>
     <div>
-      <button id="startKid" class="yellowBtn">Kid Mode</button>
-      <button id="startStd" class="yellowBtn">Standard Mode</button>
+      <button id="startKid" class="yellowBtn" onclick="safeStart(true)">Kid Mode</button>
+      <button id="startStd" class="yellowBtn" onclick="safeStart(false)">Standard Mode</button>
     </div>
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.22</div>
+    <div id="versionTag">Version v1.0.24</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -110,20 +101,18 @@
 
   <div class="credits">Works offline after first load</div>
 
-  <script src="assets/kaboom.js?v=1021"></script>
+  <script src="assets/kaboom.js?v=1024"></script>
 
   <script>
     // ===== Debug =====
     const $ = (id)=>document.getElementById(id);
     const dbgBox = $('debug');
-    function dbg(msg){ dbgBox.style.display='block'; dbgBox.textContent += (msg + "\n"); console.log(msg); }
+    function dbg(msg){ try{dbgBox.style.display='block';dbgBox.textContent += (msg + "\n");}catch{} console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    dbg("Booting Sylveons Quest (v1.0.20)...");
-    dbg("Checking engine: " + (typeof window.kaboom));
-
-    $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); });
-    $('startStd').addEventListener('click', ()=>{ dbg("UI: Standard Mode clicked"); safeStart(false); });
+    // Extra safety: still bind via JS, but inline onclick ensures clicks work even if this block fails
+    try { $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); }); } catch {}
+    try { $('startStd').addEventListener('click', ()=>{ dbg("UI: Standard Mode clicked"); safeStart(false); }); } catch {}
     $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
 
     function safeStart(startKid){
@@ -188,8 +177,7 @@
         add([
           pos(x,y),
           { draw(){
-              pushTransform(); translate(this.pos); /* scaleTo is not a built-in in all kaboom builds */
-              scale(vec2(s)); // keep simple scale; older kaboom builds choke on custom props
+              pushTransform(); translate(this.pos); scale(vec2(s));
               drawCircle(vec2(-30,-6),28, rgb(255,255,255));
               drawCircle(vec2(0,-16),38, rgb(255,255,255));
               drawCircle(vec2(36,-10),30, rgb(255,255,255));
@@ -202,8 +190,8 @@
       }
       for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
 
-      // --- Sprites (feature-flag so we can isolate crashes)
-      const USE_SPRITES = false; // set to true once stable
+      // --- Sprites behind a flag (keep false until stable)
+      const USE_SPRITES = false;
       let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
       if (USE_SPRITES) {
         loadSprite("hero","assets/hero.png").then(()=>heroSpriteReady=true).catch(()=>{});
@@ -221,7 +209,6 @@
         "hero",
         { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
       ]);
-      // IMPORTANT: don't pass width/height to sprite() — some kaboom builds throw when unknown props are provided
       if (USE_SPRITES && heroSpriteReady) { try { hero.use(sprite("hero")); } catch(e) { dbg("sprite(hero) failed: "+e.message); } }
 
       // --- Controls
@@ -275,9 +262,6 @@
         hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
         hud2.text=`shield=${shield} practice=${practice?"on":"off"}`;
         const br=$('overReason'); if (br) br.textContent = lastKOReason;
-      } m`;
-        savedLabel.text=`Munnas: ${saved}`;
-        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
       }
 
       // --- Spawns (rect hitboxes only)
@@ -341,8 +325,8 @@
           }
         }
 
-        // fell off the world (shouldn't happen with clamp, but safety)
-        if(gameActive && hero.pos.y > height()+60) gameOver();
+        // fell off the world
+        if(gameActive && hero.pos.y > height()+60) gameOver("You fell!");
       });
 
       // --- Collisions (area-based)
@@ -355,16 +339,14 @@
           shield--; hero.invuln=1.2; lastKOReason = "Shield used!"; updateUI(); wait(1.2,()=>{ hero.invuln=0; });
         } else {
           lastKOReason = "Ouch! You bumped a hedge.";
-          if (practice) { // in practice we don't end the run; just bounce back
+          if (practice) { // practice mode: bounce, don't end run
             hero.vy = -hero.jumpPower*0.7; hero.vx = -80; hero.invuln=0.8; wait(0.8,()=>hero.invuln=0);
           } else {
-            gameOver();
+            gameOver(lastKOReason);
           }
         }
-      });
-        } else { gameOver(); }
       }
-      function gameOver(){ gameActive=false; showOver(); }
+      function gameOver(reason){ gameActive=false; lastKOReason = reason||lastKOReason; showOver(); }
 
       // --- Start / Reset UI
       function resetWorld(){
@@ -388,14 +370,14 @@
       document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; tapStart.style.display="none"; }
-      function showOver(){ gameActive=false; overScreen.style.display="flex"; tapStart.style.display="none"; }
+      function showOver(){ gameActive=false; overScreen.style.display="flex"; tapStart.style.display="none"; updateUI(); }
       function begin(){
         if(started) return; started=true;
-        restartGame();                         // world visible immediately
+        restartGame();
         startScreen.style.display="none";
         awaitingStart = true;
-        tapStart.style.display = "flex";       // translucent overlay on top
-        gameActive = false;                    // waits for first input
+        tapStart.style.display = "flex";
+        gameActive = false;
         updateUI();
       }
 
