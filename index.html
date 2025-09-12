@@ -70,7 +70,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.26</div>
+    <div id="versionTag">Version v1.0.27</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -92,6 +92,7 @@
   <div class="btnbar">
     <button id="btnKid">Kid Mode: OFF</button>
     <button id="btnPractice">Practice: OFF</button>
+    <button id="btnSprites">Sprites: OFF</button>
     <button id="btnMute">Mute</button>
     <button id="btnPause">Pause</button>
     <button id="btnFS">Full screen</button>
@@ -101,7 +102,7 @@
 
   <div class="credits">Works offline after first load</div>
 
-  <script src="assets/kaboom.js?v=1024"></script>
+  <script src="assets/kaboom.js?v=1027"></script>
 
   <script>
     // ===== Debug =====
@@ -111,296 +112,248 @@
 ");}catch{} console.log(msg); }
     window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
 
-    // Extra safety: still bind via JS, but inline onclick ensures clicks work even if this block fails
+    // Bind also with JS (extra safety)
     try { $('startKid').addEventListener('click', ()=>{ dbg("UI: Kid Mode clicked"); safeStart(true); }); } catch {}
     try { $('startStd').addEventListener('click', ()=>{ dbg("UI: Standard Mode clicked"); safeStart(false); }); } catch {}
     $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
 
-    function safeStart(startKid){
+    // Make safeStart globally accessible for inline onclick
+    window.safeStart = function(startKid){
+      dbg("safeStart("+startKid+") called. kaboom type=" + typeof window.kaboom);
       try {
         if (typeof window.kaboom !== 'function') {
           dbg("Engine missing. Check assets/kaboom.js exists.");
           alert("Game engine not found. Please confirm assets/kaboom.js exists.");
           return;
         }
-        startGame(startKid);
+        startGame(!!startKid);
       } catch (err) {
-        dbg("startGame crashed: " + err.message);
+        dbg("safeStart crash: " + err.message);
+        alert("Start failed: " + err.message);
       }
     }
 
     function startGame(startKid){
       dbg("startGame() entered — kid=" + !!startKid);
+      try {
+        const THEME={skyTop:[255,208,234],skyBottom:[255,238,250], hedgePink:[255,169,214],
+                     heroFallback:[255,182,238], munnaFallback:[255,163,213]};
+        const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
 
-      const THEME={skyTop:[255,208,234],skyBottom:[255,238,250], hedgePink:[255,169,214],
-                   heroFallback:[255,182,238], munnaFallback:[255,163,213]};
-      const SPEEDS={normalStart:280,kidStart:230,minuteRamp:60};
+        const k=kaboom({
+          background:THEME.skyBottom,
+          touchToMouse:true,
+          global:true,
+          width:Math.min(window.innerWidth,1920),
+          height:Math.min(window.innerHeight,1080),
+          canvas:document.getElementById("game"),
+          scale:1
+        });
+        dbg("Kaboom initialised ✔︎");
 
-      const k=kaboom({
-        background:THEME.skyBottom,
-        touchToMouse:true,
-        global:true,
-        width:Math.min(window.innerWidth,1920),
-        height:Math.min(window.innerHeight,1080),
-        canvas:document.getElementById("game"),
-        scale:1
-      });
-      dbg("Kaboom initialised ✔︎");
+        const startScreen=$('startScreen');
+        const overScreen=$('overScreen');
+        const tapStart=$('tapStart');
 
-      const startScreen=$('startScreen');
-      const overScreen=$('overScreen');
-      const tapStart=$('tapStart');
+        let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
+        let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
+        let practice=false, spritesOn=false, lastKOReason="";
+        let graceFrames=120; // ~2s after first input
 
-      let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
-      let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
-      let practice=false, lastKOReason="";
-      let graceFrames=120; // ~2s after first input
+        // === World constants
+        const GRAV=2000;
+        const GROUND_H=120;
+        const GROUND_Y=height()-GROUND_H;
 
-      // === World constants
-      const GRAV=2000;
-      const GROUND_H=120;
-      const GROUND_Y=height()-GROUND_H;
+        // --- Draw ground strips (visual only)
+        function makeGroundVisual(x){
+          return add([
+            pos(x,GROUND_Y),
+            rect(width(),GROUND_H),
+            color(255,255,255),
+            move(LEFT,0),
+            "groundvis"
+          ]);
+        }
+        let groundA=makeGroundVisual(0), groundB=makeGroundVisual(width());
 
-      // --- Draw ground strips (visual only)
-      function makeGroundVisual(x){
-        return add([
-          pos(x,GROUND_Y),
-          rect(width(),GROUND_H),
-          color(255,255,255),
-          move(LEFT,0),
-          "groundvis"
+        // --- Background clouds (visible while waiting)
+        function puffyCloud(x,y,s){
+          add([
+            pos(x,y),
+            { draw(){
+                pushTransform(); translate(this.pos); scale(vec2(s));
+                drawCircle(vec2(-30,-6),28, rgb(255,255,255));
+                drawCircle(vec2(0,-16),38, rgb(255,255,255));
+                drawCircle(vec2(36,-10),30, rgb(255,255,255));
+                drawCircle(vec2(60,-18),22, rgb(255,255,255));
+                popTransform();
+            }},
+            move(LEFT, 20),
+            "bgcloud"
+          ]);
+        }
+        for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
+
+        // --- Preload sprites (do not touch hero here)
+        let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
+        loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
+        loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
+        loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
+
+        // --- Hero (manual physics)
+        const hero=add([
+          pos(160,GROUND_Y-30),
+          rect(54,34),
+          area(),
+          color(...THEME.heroFallback),
+          anchor("center"),
+          "hero",
+          { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
         ]);
-      }
-      let groundA=makeGroundVisual(0), groundB=makeGroundVisual(width());
 
-      // --- Background clouds (visible while waiting)
-      function puffyCloud(x,y,s){
-        add([
-          pos(x,y),
-          { draw(){
-              pushTransform(); translate(this.pos); scale(vec2(s));
-              drawCircle(vec2(-30,-6),28, rgb(255,255,255));
-              drawCircle(vec2(0,-16),38, rgb(255,255,255));
-              drawCircle(vec2(36,-10),30, rgb(255,255,255));
-              drawCircle(vec2(60,-18),22, rgb(255,255,255));
-              popTransform();
-          }},
-          move(LEFT, 20),
-          "bgcloud"
-        ]);
-      }
-      for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
-
-      // --- Sprites behind a flag (keep false until stable)
-      const USE_SPRITES = true;
-      let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-      // Load sprites but don't touch the hero reference here (can fire before hero exists)
-      loadSprite("hero","assets/hero.png").then(()=>{ heroSpriteReady=true; }).catch(()=>{});
-      loadSprite("munna","assets/munna.png").then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
-      loadSprite("hedge","assets/hedge.png").then(()=>{ hedgeSpriteReady=true; }).catch(()=>{}););
-        loadSprite("munna","assets/munna.png").then(()=>munnaSpriteReady=true).catch(()=>{});
-        loadSprite("hedge","assets/hedge.png").then(()=>hedgeSpriteReady=true).catch(()=>{});
-      }
-
-      // --- Hero (manual physics)
-      const hero=add([
-        pos(160,GROUND_Y-30),
-        rect(54,34),
-        area(),
-        color(...THEME.heroFallback),
-        anchor("center"),
-        "hero",
-        { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true }
-      ]);
-      // Attach sprite once it's safe (handles cache-fast loads before hero exists)
-      let heroSpriteApplied = false;
-      if (USE_SPRITES && heroSpriteReady) { try { hero.use(sprite("hero")); heroSpriteApplied = true; } catch(e) { dbg("sprite(hero) immediate failed: "+e.message); } }
-      onUpdate(() => {
-        if (!heroSpriteApplied && USE_SPRITES && heroSpriteReady && hero.exists()) {
-          try { hero.use(sprite("hero")); heroSpriteApplied = true; } catch(e) { dbg("sprite(hero) later failed: "+e.message); }
+        function applyHeroSprite(){
+          if (!spritesOn || !heroSpriteReady) return;
+          try { hero.use(sprite("hero")); } catch(e) { dbg("sprite(hero) failed: "+e.message); }
         }
-      }); catch(e) { dbg("sprite(hero) failed: "+e.message); } } catch(e) { dbg("sprite(hero) failed: "+e.message); } }
 
-      // --- Controls
-      function doJump(){
-        if(!gameActive) return;
-        if(hero.onGround){ hero.vy = -hero.jumpPower; hero.onGround=false; hero.canDouble=true; dbg("Jump"); }
-        else if(hero.canDouble){ hero.vy = -hero.jumpPower*0.9; hero.canDouble=false; dbg("Double-jump"); }
-      }
-      function firstStart(){
-        if (!awaitingStart) return;
-        awaitingStart = false;
-        tapStart.style.display = "none";
-        gameActive = true;
-        updateUI();
-      }
-      tapStart.addEventListener('click', firstStart, {passive:true});
-      onClick(()=>{ if (awaitingStart) firstStart(); else doJump(); });
+        // --- Controls
+        function doJump(){
+          if(!gameActive) return;
+          if(hero.onGround){ hero.vy = -hero.jumpPower; hero.onGround=false; hero.canDouble=true; dbg("Jump"); }
+          else if(hero.canDouble){ hero.vy = -hero.jumpPower*0.9; hero.canDouble=false; dbg("Double-jump"); }
+        }
+        function firstStart(){
+          if (!awaitingStart) return;
+          awaitingStart = false;
+          tapStart.style.display = "none";
+          gameActive = true;
+          updateUI();
+        }
+        tapStart.addEventListener('click', firstStart, {passive:true});
+        onClick(()=>{ if (awaitingStart) firstStart(); else doJump(); });
 
-      // Touch swipe for iPad
-      let swipeStart=null;
-      window.addEventListener('touchstart',(e)=>{ swipeStart = e.touches[0].clientX; if (awaitingStart) firstStart(); }, {passive:true});
-      window.addEventListener('touchmove',(e)=>{
-        if(!gameActive || swipeStart===null) return;
-        const dx = e.touches[0].clientX - swipeStart;
-        const s = 220;
-        if (dx > 30) hero.vx = +s;
-        else if (dx < -30) hero.vx = -s;
-      }, {passive:true});
-      window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
+        // Touch swipe for iPad
+        let swipeStart=null;
+        window.addEventListener('touchstart',(e)=>{ swipeStart = e.touches[0].clientX; if (awaitingStart) firstStart(); }, {passive:true});
+        window.addEventListener('touchmove',(e)=>{
+          if(!gameActive || swipeStart===null) return;
+          const dx = e.touches[0].clientX - swipeStart;
+          const s = 220;
+          if (dx > 30) hero.vx = +s;
+          else if (dx < -30) hero.vx = -s;
+        }, {passive:true});
+        window.addEventListener('touchend',()=>{ swipeStart=null; }, {passive:true});
 
-      // Keyboard (document-level)
-      document.addEventListener('keydown', (ev)=>{
-        const key = ev.key.toLowerCase();
-        const startKeys = [' ', 'arrowup', 'w', 'arrowleft', 'a', 'arrowright', 'd'];
-        if (awaitingStart && startKeys.includes(key)) { firstStart(); return; }
-        if (!gameActive) return;
-        if (key === 'arrowleft' || key === 'a') hero.vx = -260;
-        if (key === 'arrowright' || key === 'd') hero.vx = 260;
-        if (key === ' ' || key === 'arrowup' || key === 'w') doJump();
-      });
+        // Keyboard (document-level)
+        document.addEventListener('keydown', (ev)=>{
+          const key = ev.key.toLowerCase();
+          const startKeys = [' ', 'arrowup', 'w', 'arrowleft', 'a', 'arrowright', 'd'];
+          if (awaitingStart && startKeys.includes(key)) { firstStart(); return; }
+          if (!gameActive) return;
+          if (key === 'arrowleft' || key === 'a') hero.vx = -260;
+          if (key === 'arrowright' || key === 'd') hero.vx = 260;
+          if (key === ' ' || key === 'arrowup' || key === 'w') doJump();
+        });
 
-      // --- HUD
-      let meters=0, saved=0;
-      const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
-      const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
-      const hud=add([text("",{size:14}),pos(16,84),fixed(),color(20,20,20)]);
-      const hud2=add([text("",{size:14}),pos(16,106),fixed(),color(20,20,20)]);
-      function updateUI(){
-        meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
-        savedLabel.text=`Munnas: ${saved}`;
-        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
-        hud2.text=`shield=${shield} practice=${practice?"on":"off"}`;
-        const br=$('overReason'); if (br) br.textContent = lastKOReason;
-      }
+        // --- HUD
+        let meters=0, saved=0;
+        const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
+        const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
+        const hud=add([text("",{size:14}),pos(16,84),fixed(),color(20,20,20)]);
+        const hud2=add([text("",{size:14}),pos(16,106),fixed(),color(20,20,20)]);
+        function updateUI(){
+          meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
+          savedLabel.text=`Munnas: ${saved}`;
+          hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
+          hud2.text=`shield=${shield} practice=${practice?"on":"off"} sprites=${spritesOn?"on":"off"}`;
+          const br=$('overReason'); if (br) br.textContent = lastKOReason;
+        }
 
-      // --- Spawns (rect hitboxes only)
-      function spawnHedge(){
-        const fly=chance(0.45);
-        const w=rand(36,64), h=rand(28,48);
-        const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
-        const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), "obstacle" ]);
-        if (USE_SPRITES && hedgeSpriteReady) { try { o.use(sprite("hedge")); } catch(e) { dbg("sprite(hedge) failed: "+e.message); } }
-      }
-      function spawnMunna(){
-        const y=rand(GROUND_Y-260,GROUND_Y-90);
-        const s=rand(20, kidMode?28:24);
-        const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), "collectible" ]);
-        if (USE_SPRITES && munnaSpriteReady) { try { c.use(sprite("munna")); } catch(e) { dbg("sprite(munna) failed: "+e.message); } }
-      }
+        // --- Spawns
+        function spawnHedge(){
+          const fly=chance(0.45);
+          const w=rand(36,64), h=rand(28,48);
+          const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
+          const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), "obstacle" ]);
+          if (spritesOn && hedgeSpriteReady) { try { o.use(sprite("hedge")); } catch(e) { dbg("sprite(hedge) failed: "+e.message); } }
+        }
+        function spawnMunna(){
+          const y=rand(GROUND_Y-260,GROUND_Y-90);
+          const s=rand(20, kidMode?28:24);
+          const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), "collectible" ]);
+          if (spritesOn && munnaSpriteReady) { try { c.use(sprite("munna")); } catch(e) { dbg("sprite(munna) failed: "+e.message); } }
+        }
 
-      // --- Game tick
-      loop(1,()=>{
-        if(!gameActive) return;
-        meters += worldSpeed/60;
-        minuteTimer++;
-        if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp;
-        updateUI();
-      });
+        // --- Game tick
+        loop(1,()=>{
+          if(!gameActive) return;
+          meters += worldSpeed/60;
+          minuteTimer++;
+          if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp;
+          updateUI();
+        });
 
-      onUpdate(()=>{
-        // scroll ground strips only when active
-        const vx = gameActive ? worldSpeed : 0;
-        [groundA,groundB].forEach(g=>g.move(LEFT, vx));
-        if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
-        if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
+        onUpdate(()=>{
+          const vx = gameActive ? worldSpeed : 0;
+          [groundA,groundB].forEach(g=>g.move(LEFT, vx));
+          if(groundA.pos.x + width() < 0) groundA.pos.x = groundB.pos.x + width();
+          if(groundB.pos.x + width() < 0) groundB.pos.x = groundA.pos.x + width();
 
-        if (gameActive) {
-          // manual gravity
-          hero.vy += GRAV * dt();
-          hero.pos.y += hero.vy * dt();
-
-          // clamp to ground
-          const floorY = GROUND_Y - 30; // hero half-height approx
-          if (hero.pos.y > floorY) {
-            hero.pos.y = floorY;
-            hero.vy = 0;
-            if (!hero.onGround) { hero.onGround = true; hero.canDouble = true; }
-          } else {
-            hero.onGround = false;
+          if (gameActive) {
+            hero.vy += GRAV * dt();
+            hero.pos.y += hero.vy * dt();
+            const floorY = GROUND_Y - 30;
+            if (hero.pos.y > floorY) { hero.pos.y = floorY; hero.vy = 0; if (!hero.onGround) { hero.onGround = true; hero.canDouble = true; } }
+            else { hero.onGround = false; }
+            hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
+            hero.vx *= 0.9;
           }
 
-          // horizontal move with friction
-          hero.pos.x = clamp(hero.pos.x + hero.vx * dt(), 60, width()*0.75);
-          hero.vx *= 0.9;
-        }
-
-        // spawn logic
-        if (gameActive) {
-          if (graceFrames > 0) {
-            graceFrames--;
-          } else {
-            if (chance(kidMode?0.55:0.7)) spawnHedge();
-            if (chance(kidMode?0.75:0.6)) spawnMunna();
+          if (gameActive) {
+            if (graceFrames > 0) { graceFrames--; }
+            else { if (chance(kidMode?0.55:0.7)) spawnHedge(); if (chance(kidMode?0.75:0.6)) spawnMunna(); }
           }
+
+          if(gameActive && hero.pos.y > height()+60) gameOver("You fell!");
+        });
+
+        // --- Collisions
+        hero.onCollide && hero.onCollide("obstacle",()=>{ if(gameActive && graceFrames<=0) hitObstacle(); });
+        hero.onCollide && hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
+
+        function hitObstacle(){
+          if(hero.invuln>0) return;
+          if(shield>0){ shield--; hero.invuln=1.2; lastKOReason = "Shield used!"; updateUI(); wait(1.2,()=>{ hero.invuln=0; }); }
+          else { lastKOReason = "Ouch! You bumped a hedge."; if (practice) { hero.vy = -hero.jumpPower*0.7; hero.vx = -80; hero.invuln=0.8; wait(0.8,()=>hero.invuln=0); } else { gameOver(lastKOReason); } }
         }
+        function gameOver(reason){ gameActive=false; lastKOReason = reason||lastKOReason; showOver(); }
 
-        // fell off the world
-        if(gameActive && hero.pos.y > height()+60) gameOver("You fell!");
-      });
+        // --- Start / Reset UI
+        function resetWorld(){ try { destroyAll("obstacle"); } catch {} try { destroyAll("collectible"); } catch {} try { destroyAll("bgcloud"); } catch {} }
+        function restartGame(){ resetWorld(); meters=0; saved=0; minuteTimer=0; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; shield=1; hero.invuln=0; hero.pos=vec2(160,GROUND_Y-30); hero.vy=0; hero.vx=0; hero.canDouble=false; hero.onGround=true; graceFrames = 120; updateUI(); }
 
-      // --- Collisions (area-based)
-      hero.onCollide && hero.onCollide("obstacle",()=>{ if(gameActive && graceFrames<=0) hitObstacle(); });
-      hero.onCollide && hero.onCollide("collectible",c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
+        $('btnKid').onclick=()=>{ kidMode=!kidMode; $('btnKid').textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; updateUI(); };
+        $('btnPause').onclick=()=>{ gameActive=!gameActive; updateUI(); };
+        $('btnPractice').onclick=()=>{ practice=!practice; $('btnPractice').textContent=`Practice: ${practice?"ON":"OFF"}`; updateUI(); };
+        $('btnSprites').onclick=()=>{
+          spritesOn=!spritesOn; $('btnSprites').textContent=`Sprites: ${spritesOn?"ON":"OFF"}`; if (spritesOn) applyHeroSprite(); updateUI();
+        };
+        $('btnFS').onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-      function hitObstacle(){
-        if(hero.invuln>0) return;
-        if(shield>0){
-          shield--; hero.invuln=1.2; lastKOReason = "Shield used!"; updateUI(); wait(1.2,()=>{ hero.invuln=0; });
-        } else {
-          lastKOReason = "Ouch! You bumped a hedge.";
-          if (practice) { // practice mode: bounce, don't end run
-            hero.vy = -hero.jumpPower*0.7; hero.vx = -80; hero.invuln=0.8; wait(0.8,()=>hero.invuln=0);
-          } else {
-            gameOver(lastKOReason);
-          }
-        }
+        function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; tapStart.style.display="none"; }
+        function showOver(){ gameActive=false; overScreen.style.display="flex"; tapStart.style.display="none"; updateUI(); }
+        function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display="none"; awaitingStart = true; tapStart.style.display = "flex"; gameActive = false; updateUI(); }
+
+        $('btnKid').textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
+        $('btnSprites').textContent=`Sprites: ${spritesOn?"ON":"OFF"}`;
+        begin();
+
+        dbg("Game started (awaiting first tap) ✔︎");
+      } catch (err) {
+        dbg("startGame crash: " + err.message);
+        alert("Game error: " + err.message);
       }
-      function gameOver(reason){ gameActive=false; lastKOReason = reason||lastKOReason; showOver(); }
-
-      // --- Start / Reset UI
-      function resetWorld(){
-        try { destroyAll("obstacle"); } catch {}
-        try { destroyAll("collectible"); } catch {}
-        try { destroyAll("bgcloud"); } catch {}
-      }
-      function restartGame(){
-        resetWorld();
-        meters=0; saved=0; minuteTimer=0;
-        worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart;
-        shield=1; hero.invuln=0;
-        hero.pos=vec2(160,GROUND_Y-30); hero.vy=0; hero.vx=0; hero.canDouble=false; hero.onGround=true;
-        graceFrames = 120;
-        updateUI();
-      }
-
-      document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; updateUI(); };
-      document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; updateUI(); };
-      document.getElementById("btnPractice").onclick=()=>{ practice=!practice; document.getElementById("btnPractice").textContent=`Practice: ${practice?"ON":"OFF"}`; updateUI(); };
-      document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
-
-      function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; tapStart.style.display="none"; }
-      function showOver(){
-        gameActive=false;
-        const br=$('overReason'); if (br) br.textContent = lastKOReason || 'Game over!';
-        overScreen.style.display="flex";
-        tapStart.style.display="none";
-        updateUI();
-      }
-      function begin(){
-        if(started) return; started=true;
-        restartGame();
-        startScreen.style.display="none";
-        awaitingStart = true;
-        tapStart.style.display = "flex";
-        gameActive = false;
-        updateUI();
-      }
-
-      document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`;
-      begin();
-
-      dbg("Game started (awaiting first tap) ✔︎");
     }
   </script>
 </body>
