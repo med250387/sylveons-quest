@@ -79,12 +79,13 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.21</div>
+    <div id="versionTag">Version v1.0.22</div>
   </section>
 
   <!-- Game Over Screen -->
   <section id="overScreen" class="screen">
     <h2 id="overTitle">Try again?</h2>
+    <div id="overReason" style="font:16px/1.2 ui-sans-serif,system-ui;color:#b10052;margin:6px 0 12px;">&nbsp;</div>
     <button id="tryBtn" class="yellowBtn">Tap to Restart</button>
   </section>
 
@@ -99,6 +100,7 @@
   <div class="badge">Sylveon Sky Run • Tap/Click: Jump • Swipe/Arrows: Move</div>
   <div class="btnbar">
     <button id="btnKid">Kid Mode: OFF</button>
+    <button id="btnPractice">Practice: OFF</button>
     <button id="btnMute">Mute</button>
     <button id="btnPause">Pause</button>
     <button id="btnFS">Full screen</button>
@@ -161,6 +163,7 @@
 
       let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
       let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
+      let practice=false, lastKOReason="";
       let graceFrames=120; // ~2s after first input
 
       // === World constants
@@ -265,8 +268,14 @@
       const meterLabel=add([text("",{size:30}),pos(16,16),fixed()]);
       const savedLabel=add([text("",{size:30}),pos(16,50),fixed()]);
       const hud=add([text("",{size:14}),pos(16,84),fixed(),color(20,20,20)]);
+      const hud2=add([text("",{size:14}),pos(16,106),fixed(),color(20,20,20)]);
       function updateUI(){
         meterLabel.text=`Distance: ${meters.toFixed(1)} m`;
+        savedLabel.text=`Munnas: ${saved}`;
+        hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
+        hud2.text=`shield=${shield} practice=${practice?"on":"off"}`;
+        const br=$('overReason'); if (br) br.textContent = lastKOReason;
+      } m`;
         savedLabel.text=`Munnas: ${saved}`;
         hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?" • waiting":(graceFrames>0?" • grace":"")}`;
       }
@@ -343,7 +352,16 @@
       function hitObstacle(){
         if(hero.invuln>0) return;
         if(shield>0){
-          shield--; hero.invuln=1.5; updateUI(); wait(1.5,()=>{ hero.invuln=0; });
+          shield--; hero.invuln=1.2; lastKOReason = "Shield used!"; updateUI(); wait(1.2,()=>{ hero.invuln=0; });
+        } else {
+          lastKOReason = "Ouch! You bumped a hedge.";
+          if (practice) { // in practice we don't end the run; just bounce back
+            hero.vy = -hero.jumpPower*0.7; hero.vx = -80; hero.invuln=0.8; wait(0.8,()=>hero.invuln=0);
+          } else {
+            gameOver();
+          }
+        }
+      });
         } else { gameOver(); }
       }
       function gameOver(){ gameActive=false; showOver(); }
@@ -366,6 +384,7 @@
 
       document.getElementById("btnKid").onclick=()=>{ kidMode=!kidMode; document.getElementById("btnKid").textContent=`Kid Mode: ${kidMode?"ON":"OFF"}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; updateUI(); };
       document.getElementById("btnPause").onclick=()=>{ gameActive=!gameActive; updateUI(); };
+      document.getElementById("btnPractice").onclick=()=>{ practice=!practice; document.getElementById("btnPractice").textContent=`Practice: ${practice?"ON":"OFF"}`; updateUI(); };
       document.getElementById("btnFS").onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
       function showStart(){ gameActive=false; startScreen.style.display="flex"; overScreen.style.display="none"; tapStart.style.display="none"; }
