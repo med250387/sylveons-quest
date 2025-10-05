@@ -43,7 +43,7 @@
       background: #fff6fa; color:#6a0030; border:1px solid #ffa6c9; border-radius:10px;
       padding:8px 10px; font: 12px/1.35 ui-sans-serif, system-ui; white-space: pre-wrap;
       box-shadow: 0 6px 18px rgba(0,0,0,0.15);
-      display: block; /* force visible so we always see logs */
+      display: block;
     }
     #debug b { color:#a3003d; }
 
@@ -70,7 +70,7 @@
     <p style="margin-top:10px;font:14px/1.2 ui-sans-serif,system-ui;">
       If nothing happens, hard-refresh (⌘⇧R). On iPad: hold reload → “Reload Without Content Blockers”.
     </p>
-    <div id="versionTag">Version v1.0.30</div>
+    <div id="versionTag">Version v1.0.31</div>
   </section>
 
   <!-- Game Over Screen -->
@@ -92,7 +92,6 @@
   <div class="btnbar">
     <button id="btnKid">Kid Mode: OFF</button>
     <button id="btnPractice">Practice: OFF</button>
-    <button id="btnSprites">Sprites: ON</button>
     <button id="btnMute">Mute</button>
     <button id="btnPause">Pause</button>
     <button id="btnFS">Full screen</button>
@@ -102,41 +101,33 @@
 
   <div class="credits">Works offline after first load</div>
 
-  <!-- Early logger so we always see something, then load engine BEFORE game script -->
   <script>
-    function __logEarly(msg){
-      const box = document.getElementById('debug');
-      if (box) { box.textContent += msg + "\n"; }
-      console.log(msg);
-    }
-    __logEarly('Boot HTML loaded (v1.0.30). About to load engine...');
+    // Early logger
+    function __log(msg){ const box=document.getElementById('debug'); if(box) box.textContent += msg + "
+"; console.log(msg); }
+    __log('Boot HTML loaded (v1.0.31). Loading engine...');
   </script>
-  <script src="assets/kaboom.js?v=1030" onload="__logEarly('kaboom.js loaded');" onerror="__logEarly('kaboom.js FAILED to load — check path assets/kaboom.js');"></script>
+  <script src="assets/kaboom.js?v=1031" onload="__log('kaboom.js loaded')" onerror="__log('kaboom.js FAILED — check path assets/kaboom.js')"></script>
 
   <script>
     // ===== Debug helpers =====
     const $ = (id)=>document.getElementById(id);
     const dbgBox = $('debug');
-    function dbg(msg){ try{dbgBox.style.display='block';dbgBox.textContent += (msg + "\n");}catch{} console.log(msg); }
-    window.addEventListener('error', (e)=>{ dbg("JS Error: " + e.message + " @ " + (e.filename||'') + ":" + (e.lineno||'?')); });
+    function dbg(msg){ try{dbgBox.style.display='block';dbgBox.textContent += (msg + "
+");}catch{} console.log(msg); }
 
-    // Expose safeStart globally for inline onclick
+    // Expose safeStart globally
     window.safeStart = function(startKid){
       dbg("safeStart("+startKid+") called. kaboom type=" + typeof window.kaboom);
       try {
         if (typeof window.kaboom !== 'function') {
-          dbg("Engine missing. Check assets/kaboom.js exists.");
-          alert("Game engine not found. Please confirm assets/kaboom.js exists.");
-          return;
+          dbg('Engine missing.'); alert('Game engine not found.'); return;
         }
         startGame(!!startKid);
-      } catch (err) {
-        dbg("safeStart crash: " + err.message);
-        alert("Start failed: " + err.message);
-      }
+      } catch (err) { dbg('safeStart crash: '+err.message); alert('Start failed: '+err.message); }
     }
 
-    // Also bind with JS (belt + braces)
+    // Also bind with JS
     try { $('startKid').addEventListener('click', ()=>{ dbg('UI: Kid Mode clicked'); window.safeStart(true); }); } catch {}
     try { $('startStd').addEventListener('click', ()=>{ dbg('UI: Standard Mode clicked'); window.safeStart(false); }); } catch {}
     $('tryBtn').addEventListener('click', ()=>{ $('startScreen').style.display='flex'; $('overScreen').style.display='none'; });
@@ -159,33 +150,35 @@
 
         let kidMode=!!startKid, worldSpeed=kidMode?SPEEDS.kidStart:SPEEDS.normalStart;
         let minuteTimer=0, shield=1, gameActive=false, started=false, awaitingStart=true;
-        let practice=false, spritesOn=true, lastKOReason="";
-        let graceFrames=120; // ~2s after first input
+        let practice=false, lastKOReason="";
+        let graceFrames=120;
 
         const GRAV=2000, GROUND_H=120, GROUND_Y=height()-GROUND_H;
 
-        // --- Ground visuals ---
         function makeGroundVisual(x){ return add([ pos(x,GROUND_Y), rect(width(),GROUND_H), color(255,255,255), move(LEFT,0), 'groundvis' ]); }
         let groundA=makeGroundVisual(0), groundB=makeGroundVisual(width());
 
-        // --- Cute clouds ---
         function puffyCloud(x,y,s){ add([ pos(x,y), { draw(){ pushTransform(); translate(this.pos); scale(vec2(s)); drawCircle(vec2(-30,-6),28, rgb(255,255,255)); drawCircle(vec2(0,-16),38, rgb(255,255,255)); drawCircle(vec2(36,-10),30, rgb(255,255,255)); drawCircle(vec2(60,-18),22, rgb(255,255,255)); popTransform(); }}, move(LEFT, 20), 'bgcloud' ]); }
         for (let i=0;i<6;i++) puffyCloud(rand(40,width()-40), rand(60, GROUND_Y-140), rand(1.0,1.8));
 
-        // --- Load sprites safely (no sizing props) ---
+        // --- Load sprites (we will attach them as separate visual followers to avoid component conflicts) ---
         let heroSpriteReady=false, munnaSpriteReady=false, hedgeSpriteReady=false;
-        loadSprite('hero','assets/hero.png').then(()=>{ heroSpriteReady=true; }).catch(()=>{});
-        loadSprite('munna','assets/munna.png').then(()=>{ munnaSpriteReady=true; }).catch(()=>{});
-        loadSprite('hedge','assets/hedge.png').then(()=>{ hedgeSpriteReady=true; }).catch(()=>{});
+        loadSprite('hero','assets/hero.png').then(()=>heroSpriteReady=true).catch(()=>{});
+        loadSprite('munna','assets/munna.png').then(()=>munnaSpriteReady=true).catch(()=>{});
+        loadSprite('hedge','assets/hedge.png').then(()=>hedgeSpriteReady=true).catch(()=>{});
 
-        // --- Hero (manual physics) ---
+        // --- Hero (physics + hitbox only) ---
         const hero=add([ pos(160,GROUND_Y-30), rect(54,34), area(), color(...THEME.heroFallback), anchor('center'), 'hero', { vy:0, jumpPower:760, canDouble:false, vx:0, maxVX:360, invuln:0, onGround:true } ]);
-        let heroSpriteApplied=false;
-        function applyHeroSprite(){
-          if (heroSpriteApplied || !spritesOn || !heroSpriteReady || !hero.exists()) return;
-          try { hero.use(sprite('hero')); heroSpriteApplied=true; dbg('hero sprite applied'); } catch(e) { dbg('sprite(hero) failed: '+e.message); }
-        }
-        onUpdate(applyHeroSprite); // apply once ready
+        // visual follower (no rect, so no width/height conflict)
+        let heroVis=null;
+        onUpdate(()=>{
+          if (!heroVis && heroSpriteReady) {
+            try {
+              heroVis = add([ sprite('hero'), anchor('center'), pos(hero.pos) , { update(){ this.pos = hero.pos.clone(); } } ]);
+              dbg('hero sprite created as follower');
+            } catch(e) { dbg('hero sprite create failed: '+e.message); }
+          }
+        });
 
         // --- Controls ---
         function doJump(){ if(!gameActive) return; if(hero.onGround){ hero.vy=-hero.jumpPower; hero.onGround=false; hero.canDouble=true; dbg('Jump'); } else if(hero.canDouble){ hero.vy=-hero.jumpPower*0.9; hero.canDouble=false; dbg('Double-jump'); } }
@@ -204,12 +197,23 @@
         const meterLabel=add([text('',{size:30}),pos(16,16),fixed()]);
         const savedLabel=add([text('',{size:30}),pos(16,50),fixed()]);
         const hud=add([text('',{size:14}),pos(16,84),fixed(),color(20,20,20)]);
-        const hud2=add([text('',{size:14}),pos(16,106),fixed(),color(20,20,20)]);
-        function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?' • waiting':(graceFrames>0?' • grace':'')}`; hud2.text=`shield=${shield} practice=${practice?'on':'off'} sprites=${spritesOn?'on':'off'}`; const br=$('overReason'); if (br) br.textContent = lastKOReason; }
+        function updateUI(){ meterLabel.text=`Distance: ${meters.toFixed(1)} m`; savedLabel.text=`Munnas: ${saved}`; hud.text=`y=${Math.round(hero.pos.y)} speed=${Math.round(worldSpeed)}${awaitingStart?' • waiting':(graceFrames>0?' • grace':'')}`; const br=$('overReason'); if (br) br.textContent = lastKOReason; }
 
         // --- Spawns ---
-        function spawnHedge(){ const fly=chance(0.45); const w=rand(36,64), h=rand(28,48); const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h); const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), 'obstacle' ]); if (spritesOn && hedgeSpriteReady) { try { o.use(sprite('hedge')); } catch(e) { dbg('sprite(hedge) failed: '+e.message); } } }
-        function spawnMunna(){ const y=rand(GROUND_Y-260,GROUND_Y-90); const s=rand(20, kidMode?28:24); const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), 'collectible' ]); if (spritesOn && munnaSpriteReady) { try { c.use(sprite('munna')); } catch(e) { dbg('sprite(munna) failed: '+e.message); } } }
+        function spawnHedge(){
+          const fly=chance(0.45); const w=rand(36,64), h=rand(28,48); const y=fly?rand(GROUND_Y-250,GROUND_Y-120):(GROUND_Y-h);
+          const o=add([ pos(width()+rand(0,120),y), rect(w,h), area(), color(...THEME.hedgePink), move(LEFT,worldSpeed), 'obstacle' ]);
+          if (hedgeSpriteReady) {
+            try { add([ sprite('hedge'), pos(o.pos), anchor('center'), { update(){ this.pos = o.pos.clone(); } } ]); } catch(e) { dbg('hedge sprite create failed: '+e.message); }
+          }
+        }
+        function spawnMunna(){
+          const y=rand(GROUND_Y-260,GROUND_Y-90); const s=rand(20, kidMode?28:24);
+          const c=add([ pos(width()+rand(0,60), y), rect(s,s), area(), color(...THEME.munnaFallback), move(LEFT,worldSpeed*1.05), 'collectible' ]);
+          if (munnaSpriteReady) {
+            try { add([ sprite('munna'), pos(c.pos), anchor('center'), { update(){ this.pos = c.pos.clone(); } } ]); } catch(e) { dbg('munna sprite create failed: '+e.message); }
+          }
+        }
 
         // --- Game tick ---
         loop(1,()=>{ if(!gameActive) return; meters += worldSpeed/60; minuteTimer++; if(!kidMode && minuteTimer%60===0) worldSpeed+=SPEEDS.minuteRamp; updateUI(); });
@@ -226,31 +230,23 @@
         hero.onCollide && hero.onCollide('collectible',c=>{ if(!gameActive) return; destroy(c); saved++; updateUI(); });
 
         function hitObstacle(){ if(hero.invuln>0) return; if(shield>0){ shield--; hero.invuln=1.2; lastKOReason = 'Shield used!'; updateUI(); wait(1.2,()=>{ hero.invuln=0; }); } else { lastKOReason = 'Ouch! You bumped a hedge.'; if (practice) { hero.vy = -hero.jumpPower*0.7; hero.vx = -80; hero.invuln=0.8; wait(0.8,()=>hero.invuln=0); } else { gameOver(lastKOReason); } } }
-        function gameOver(reason){ gameActive=false; lastKOReason = reason||lastKOReason; showOver(); }
+        function gameOver(reason){ gameActive=false; lastKOReason = reason||lastKOReason; overScreen.style.display='flex'; tapStart.style.display='none'; updateUI(); }
 
         // --- Start / Reset UI ---
-        function resetWorld(){ try { destroyAll('obstacle'); } catch {} try { destroyAll('collectible'); } catch {} try { destroyAll('bgcloud'); } catch {} }
+        function resetWorld(){ try { destroyAll('obstacle'); } catch {} try { destroyAll('collectible'); } catch {} try { destroyAll('bgcloud'); } catch {} if (heroVis) { try { destroy(heroVis); } catch {} heroVis=null; } }
         function restartGame(){ resetWorld(); meters=0; saved=0; minuteTimer=0; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; shield=1; hero.invuln=0; hero.pos=vec2(160,GROUND_Y-30); hero.vy=0; hero.vx=0; hero.canDouble=false; hero.onGround=true; graceFrames = 120; updateUI(); }
 
         $('btnKid').onclick=()=>{ kidMode=!kidMode; $('btnKid').textContent=`Kid Mode: ${kidMode?'ON':'OFF'}`; worldSpeed = kidMode ? SPEEDS.kidStart : SPEEDS.normalStart; updateUI(); };
         $('btnPause').onclick=()=>{ gameActive=!gameActive; updateUI(); };
         $('btnPractice').onclick=()=>{ practice=!practice; $('btnPractice').textContent=`Practice: ${practice?'ON':'OFF'}`; updateUI(); };
-        $('btnSprites').onclick=()=>{ spritesOn=!spritesOn; $('btnSprites').textContent=`Sprites: ${spritesOn?'ON':'OFF'}`; if (spritesOn) applyHeroSprite(); updateUI(); };
         $('btnFS').onclick=()=>{ const el=document.documentElement; if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{}); else if(document.exitFullscreen) document.exitFullscreen().catch(()=>{}); };
 
-        function showStart(){ gameActive=false; startScreen.style.display='flex'; overScreen.style.display='none'; tapStart.style.display='none'; }
-        function showOver(){ gameActive=false; overScreen.style.display='flex'; tapStart.style.display='none'; updateUI(); }
         function begin(){ if(started) return; started=true; restartGame(); startScreen.style.display='none'; awaitingStart = true; tapStart.style.display = 'flex'; gameActive = false; updateUI(); }
-
         $('btnKid').textContent=`Kid Mode: ${kidMode?'ON':'OFF'}`;
-        $('btnSprites').textContent=`Sprites: ${spritesOn?'ON':'OFF'}`;
         begin();
 
         dbg('Game started (awaiting first tap) ✔︎');
-      } catch (err) {
-        dbg('startGame crash: ' + err.message);
-        alert('Game error: ' + err.message);
-      }
+      } catch (err) { dbg('startGame crash: ' + err.message); alert('Game error: ' + err.message); }
     }
   </script>
 </body>
